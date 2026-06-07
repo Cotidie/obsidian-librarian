@@ -24,8 +24,9 @@ def _batches(texts):
 class EmbeddingClient:
     def __init__(self, cfg):
         self.cfg = cfg
-        # max_retries lets the SDK back off on 429s instead of failing immediately.
-        self.client = voyageai.Client(max_retries=5)  # reads VOYAGE_API_KEY from env
+        # max_retries lets the SDK back off on 429s instead of failing immediately;
+        # generous count so backoff can outlast a free-tier per-minute (TPM) window.
+        self.client = voyageai.Client(max_retries=8)  # reads VOYAGE_API_KEY from env
 
     def _embed(self, texts, input_type):
         out = []
