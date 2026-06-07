@@ -37,6 +37,7 @@ How to use this roadmap: detail each iteration in its own numbered plan note
 | # | Iteration | User-facing slice | Layer |
 |---|-----------|-------------------|-------|
 | 1 | Dense search CLI | `vault-search "q"` → ranked notes | engine |
+| 1.5 | Ingest hygiene | results stop surfacing meta/agent files | ingest |
 | 2 | Hybrid retrieval | acronym/rare-token queries work | engine |
 | 3 | Incremental sync | always-fresh, fast re-runs | engine |
 | 4 | `obsidian-librarian` MCP | Claude Code can query the vault | wrapper |
@@ -46,6 +47,43 @@ How to use this roadmap: detail each iteration in its own numbered plan note
 
 Iterations 1–3 are detailed below; 4–7 are intentionally light and will be re-planned
 from feedback.
+
+---
+
+## Feedback from Iteration 1 (2026-06-08)
+
+Iteration 1 shipped (`vault-search` CLI: chunker → voyage-4-large → LanceDB → cosine).
+Acceptance run = real reindex + a 10-query set over the live vault. What it taught us,
+and how it revises the rest of the roadmap:
+
+- **The vault is mostly meta, not knowledge.** Before scoping, agent-instruction files
+  dominated the index (`AGENTS.md` + `CLAUDE.md` = 48 of 81 chunks, ~59%), and since
+  `CLAUDE.md` is a symlink to `AGENTS.md` the same text was embedded twice. They polluted
+  top-k (e.g. a Korean memo query surfaced `CLAUDE.md`). **→ New iteration 1.5 (ingest
+  hygiene), done:** `ignore_globs` now excludes `CLAUDE.md`/`AGENTS.md`/`README.md`;
+  reindex dropped 81→33 chunks and the polluted query cleaned up.
+- **Rare-token weakness confirmed empirically.** `GARCH`, `TinyBERT`, acronyms returned
+  plan-adjacent chunks, not exact hits. **→ Iteration 2 (hybrid BM25) ordering validated;
+  no change.**
+- **`note_hash` already enables cheap drift detection + incremental** without git (proved
+  with an ad-hoc status check). **→ Fold a `--status`/stale-check into iter 2, and
+  re-scope iter 3:** the git change-oracle becomes an *optional speed optimization*, not a
+  correctness requirement. At current scale a full reindex is ~2.7s, so iter 3 is deferred
+  until reindex latency actually hurts.
+- **Relevance can't be fully judged yet** — the vault has no domain notes (no real GARCH /
+  TinyBERT note exists to retrieve). The iter-1/2 acceptance gate leans on synthetic
+  queries until the vault grows or a few domain notes are seeded.
+- **Zero-chunk notes vanish silently** (`README.md` → 0 chunks). Minor robustness item for
+  iter 2/3 (a note with no chunks should still be tracked, or reported).
+- **Operational footguns cost real time:** a leaked ROS `PYTHONPATH` breaks `uv run`
+  (prefix `env -u PYTHONPATH`), and Voyage rate limits required retry/backoff + token-budget
+  batching (now on a paid tier; limits relaxed). Docker (iter 7) would pre-empt the
+  PYTHONPATH issue — a small argument for not deferring it indefinitely.
+- **For iter 4 (MCP): stdout purity must account for `lancedb`/`voyageai` logging**, not
+  just our own prints.
+
+Net: ordering holds (CLI → hybrid → sync → MCP → synthesis → image → Docker), with **1.5
+prepended** and **iter 3 demoted to optional**.
 
 ---
 
@@ -60,19 +98,34 @@ from feedback.
 - **Feedback to collect:** Is retrieval relevant? Chunk granularity too coarse/fine? Korean & mixed quality? Snippet/breadcrumb useful? CLI ergonomics, default `k`?
 - **Risks / open decisions:** Full reindex each `--reindex` is fine at vault size; chunking params (200–500 tok target) are the most likely thing feedback revises — keep them config, not hardcoded.
 
+## Iteration 1.5 — Ingest hygiene (DONE 2026-06-08)
+
+- **Goal:** Stop indexing non-knowledge files so relevance feedback is trustworthy.
+- **User-facing value:** Search results stop surfacing agent-instruction / meta files.
+- **What shipped:** `ignore_globs` excludes `CLAUDE.md`, `AGENTS.md`, `README.md`
+  (the `CLAUDE.md`→`AGENTS.md` symlink also caused duplicate chunks). Reindex went
+  81→33 chunks; a previously polluted query stopped returning `CLAUDE.md`.
+- **Open follow-ups:** treat zero-chunk notes explicitly (e.g. `README.md`); revisit the
+  ignore list as the vault grows (other meta files, dotfolders).
+
 ## Iteration 2 — Hybrid retrieval (add BM25)
 
 - **Goal:** Fix rare-exact-token recall (CET1, KOSDAQ150) that dense-only blurs; avoid re-embedding unchanged notes.
 - **User-facing value:** Same CLI now nails acronym/ticker queries; re-runs skip unchanged notes so reindex is cheaper.
 - **Features introduced:** LanceDB BM25 full-text index + merge with dense results (default RRF or weighted — pick one, expose a knob); per-note content-hash dedupe so `--reindex` re-embeds only changed notes (full-scan hash compare, not git yet).
-- **Deliverables:** hybrid path in `vault-search`; content-hash stored per note; merge strategy documented.
+- **Deliverables:** hybrid path in `vault-search`; content-hash stored per note; merge strategy documented; a read-only `--status` drift check (added/changed/deleted vs index) exploiting the already-stored `note_hash` (prototyped in iter 1).
 - **Testable conditions:** a BM25 query (`KOSDAQ150`) surfaces a note that pure-vector missed; `--reindex` with no edits → 0 re-embeds; edit one note → only it re-embeds.
 - **User test flow:** rerun iter-1 acronym queries, compare ranking vs iter 1; reindex twice, observe 2nd is near-instant.
 - **Feedback to collect:** Is acronym recall solved? Does hybrid ever hurt good dense hits (merge weighting)? Reindex speed acceptable?
 - **Risks / open decisions:** merge strategy choice — default reversible, tune from feedback.
 
-## Iteration 3 — Incremental sync (git change-oracle)
+## Iteration 3 — Incremental sync (git change-oracle) — RE-SCOPED: optional speed layer
 
+- **Re-scope (from iter-1 feedback):** correctness-level incremental reindex is now
+  achievable via the iter-2 `note_hash` scan, so this iteration is **demoted to an optional
+  performance optimization**: git is only the fast *change-oracle* that avoids a full
+  hash-scan at large vault sizes. Defer until reindex latency actually hurts (it is ~2.7s
+  at current scale). Everything below stands as the eventual design when that day comes.
 - **Goal:** Make the index self-freshening and O(changed files) without manual `--reindex`.
 - **User-facing value:** Just run `vault-search "q"` — it silently reconciles to current vault state first (handles auto-backup commits + uncommitted edits) and is fast even at 10K notes.
 - **Features introduced:** sync-on-invoke: `git diff --name-status <last_indexed_sha> HEAD` + `git status --porcelain` → A/M embed, D drop, R rename-path-only → hash-confirm candidates → persist new `HEAD` **last**; `last_indexed_sha` in a LanceDB meta row, validated via `git cat-file -e`; full rebuild on first run / drift; mtime+size git-less fallback.
