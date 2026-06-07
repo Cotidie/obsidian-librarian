@@ -7,6 +7,19 @@ they *mean*, not just the words they contain. Built to later back an
 
 > Design notes and the iteration roadmap live in [`docs/plans/`](docs/plans/).
 
+## Features
+
+- **Hybrid retrieval** — dense semantic vectors and BM25 keywords together, so both
+  paraphrases and rare exact tokens (acronyms, tickers) land.
+- **Multilingual** — Korean, English, and mixed-language queries all work.
+- **Heading-aware chunking** — notes are split by structure and carry a
+  `folder > title > heading` breadcrumb for precise, readable hits.
+- **Incremental indexing** — only changed notes are re-embedded, so keeping the index
+  fresh is cheap.
+- **Offline keyword mode** — pure keyword search runs with no API key or network.
+- **Local and embedded** — runs on your machine against a file-based LanceDB index kept
+  outside the vault; no server, no cloud store.
+
 ## How it works
 
 - **Indexing.** Each note is split into chunks by heading structure, embedded with
