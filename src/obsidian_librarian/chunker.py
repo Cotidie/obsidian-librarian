@@ -66,6 +66,21 @@ def parse_tree(text: str) -> _Section:
     return root
 
 
+def _unwrap_title(root: _Section) -> None:
+    # A leading H1 is the note title (the filename already carries it in the breadcrumb),
+    # so it is not a structural container: merge its body into the preamble and promote
+    # its children to top level. Keeps "Section A" reachable in breadcrumbs.
+    promoted = []
+    for child in root.children:
+        if child.level == 1:
+            if child.body():
+                root.lines.append(child.body())
+            promoted.extend(child.children)
+        else:
+            promoted.append(child)
+    root.children = promoted
+
+
 def _breadcrumb(note_path: str, heading_path: list[str]) -> str:
     parts = []
     folder = _folder_from_path(note_path)
@@ -76,31 +91,59 @@ def _breadcrumb(note_path: str, heading_path: list[str]) -> str:
     return " > ".join(parts)
 
 
-def _emit(sec: _Section, note_path: str, heading_path: list[str], chunks: list[Chunk]):
-    # Minimal one-chunk-per-section emit (size policy added in Task 3). Recurses so a
-    # leading H1 title does not swallow its H2 siblings into one chunk.
+def _paragraph_split(body: str, cfg) -> list[str]:
+    paras = [p.strip() for p in re.split(r"\n\s*\n", body) if p.strip()]
+    out, cur = [], ""
+    for p in paras:
+        candidate = (cur + "\n\n" + p).strip() if cur else p
+        if cur and estimate_tokens(candidate) > cfg.chunk_max_tokens:
+            out.append(cur)
+            # sentence overlap from the tail of the previous chunk
+            sents = re.split(r"(?<=[.!?。])\s+", cur)
+            tail = " ".join(sents[-cfg.overlap_sentences:]) if cfg.overlap_sentences else ""
+            cur = (tail + "\n\n" + p).strip() if tail else p
+        else:
+            cur = candidate
+    if cur:
+        out.append(cur)
+    return out or [body.strip()]
+
+
+def _emit_section(sec: _Section, note_path: str, heading_path: list[str],
+                  cfg, chunks: list[Chunk]):
     path = heading_path + ([sec.heading] if sec.heading else [])
+    full = sec.full_text()
+    if estimate_tokens(full) <= cfg.chunk_max_tokens:
+        if full.strip():
+            chunks.append(Chunk(note_path, _breadcrumb(note_path, path),
+                                len(chunks), full.strip()))
+        return
+    # too big: if it has children, recurse; the section's own body rides with the first child
     if sec.children:
         lead = sec.body()
         if lead.strip():
             chunks.append(Chunk(note_path, _breadcrumb(note_path, path),
                                 len(chunks), lead.strip()))
         for child in sec.children:
-            _emit(child, note_path, path, chunks)
+            _emit_section(child, note_path, path, cfg, chunks)
         return
-    full = sec.full_text()
-    if full.strip():
+    # oversized leaf: paragraph-split the body (heading stays in breadcrumb)
+    for piece in _paragraph_split(sec.body(), cfg):
         chunks.append(Chunk(note_path, _breadcrumb(note_path, path),
-                            len(chunks), full.strip()))
+                            len(chunks), piece))
 
 
 def chunk_note(note_path: str, text: str, cfg) -> list[Chunk]:
     root = parse_tree(text)
+    _unwrap_title(root)
     chunks: list[Chunk] = []
     preamble = root.body()
     if preamble.strip():
         chunks.append(Chunk(note_path, _breadcrumb(note_path, []),
                             len(chunks), preamble.strip()))
     for sec in root.children:
-        _emit(sec, note_path, [], chunks)
+        _emit_section(sec, note_path, [], cfg, chunks)
+    # reindex chunk_index after all emits (defensive)
+    for i, c in enumerate(chunks):
+        c.chunk_index = i
     return chunks
