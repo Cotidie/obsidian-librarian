@@ -768,6 +768,7 @@ dependencies = [
     { name = "numpy" },
     { name = "pyarrow" },
     { name = "python-dotenv" },
+    { name = "pyyaml" },
     { name = "voyageai" },
 ]
 
@@ -783,6 +784,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.4.6" },
     { name = "pyarrow", specifier = ">=24.0.0" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "voyageai", specifier = ">=0.4.0" },
 ]
 
