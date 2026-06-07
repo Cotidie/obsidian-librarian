@@ -1,0 +1,40 @@
+# query -> expected note (relative to corpus/). tags are for subset metrics.
+- query: "CET1 capital ratio"
+  expect: capital-ratios.md
+  tags: [acronym]
+- query: "KOSDAQ150"
+  expect: capital-ratios.md
+  tags: [acronym]
+- query: "TinyBERT distillation"
+  expect: distillation.md
+  tags: [acronym]
+- query: "GARCH structural breaks"
+  expect: volatility-regimes.md
+- query: "변동성 레짐 전환"
+  expect: volatility-regimes.md
+  tags: [korean]
+- query: "volatility regime shift"
+  expect: volatility-regimes.md
+  tags: [paraphrase]
+- query: "which embedding model should we use"
+  expect: embedding-choice.md
+  tags: [paraphrase]
+- query: "embedded vector database with no server"
+  expect: vector-store.md
+  tags: [paraphrase]
+- query: "knowledge distillation experiments"
+  expect: distillation.md
+  tags: [paraphrase]
+- query: "새로운 연구실에 적응"
+  expect: korean-note.md
+  tags: [korean]
+- query: "what did I eat for lunch"
+  expect: lunch-memo.md
+- query: "vector database choice"
+  expect: vector-store.md
+- query: "incident 9913 postmortem"
+  expect: incident-9913.md
+  tags: [exact]
+- query: "incident 9912 postmortem"
+  expect: incident-9912.md
+  tags: [exact]
