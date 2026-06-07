@@ -1,0 +1,10 @@
+GARCH structural breaks
+변동성 레짐 전환
+TinyBERT distillation experiments
+adjusting to a new lab
+semantic search design decisions
+voyage embedding model choice
+한국어 메모 검색 품질
+LanceDB vector store rationale
+describe-to-text image handling
+incremental git sync index
