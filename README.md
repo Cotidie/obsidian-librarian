@@ -1,18 +1,32 @@
 # obsidian-librarian
 
-Semantic search and synthesis over an Obsidian vault. Embeds notes with
-[Voyage](https://www.voyageai.com/) (`voyage-4-large`), stores vectors in an
-embedded [LanceDB](https://lancedb.com/) table, and answers meaning-based
-queries from the terminal — later wrapped as an `obsidian-librarian` MCP server
-for Claude Code.
+Meaning-based search over an Obsidian vault, from the terminal. Ask in natural
+language (or by keyword) and get back the most relevant notes — ranked by what
+they *mean*, not just the words they contain. Built to later back an
+`obsidian-librarian` MCP server for Claude Code.
 
-## Status
+> Design notes and the iteration roadmap live in [`docs/plans/`](docs/plans/).
 
-CLI-first, built in vertical iterations. **Iteration 1 (this code): dense
-semantic search CLI.** See [`docs/plans/`](docs/plans/):
+## Features
 
-- [`01-semantic-search-iteration-roadmap.md`](docs/plans/01-semantic-search-iteration-roadmap.md) — the 7-iteration roadmap (dense search → hybrid → sync → MCP → synthesis rule → image describe-to-text → Docker).
-- [`02-iteration-1-search-cli.md`](docs/plans/02-iteration-1-search-cli.md) — implementation plan for iteration 1.
+- **Hybrid retrieval** — dense semantic vectors and BM25 keywords together, so both
+  paraphrases and rare exact tokens (acronyms, tickers) land.
+- **Heading-aware chunking** — notes are split by structure and carry a
+  `folder > title > heading` breadcrumb for precise, readable hits.
+- **Incremental indexing** — only changed notes are re-embedded, so keeping the index
+  fresh is cheap.
+
+## How it works
+
+- **Indexing.** Each note is split into chunks by heading structure, embedded with
+  [Voyage](https://www.voyageai.com/) (`voyage-4-large`), and stored in an embedded
+  [LanceDB](https://lancedb.com/) table. The same chunks also feed a BM25 keyword index.
+- **Search is hybrid.** A query runs through two retrievers at once — **dense vectors**
+  (catch meaning and paraphrase) and **BM25 keywords** (catch rare exact tokens like
+  acronyms or tickers) — and the two rankings are fused into one result list.
+- **Reindexing is incremental.** The index remembers a content hash per note. A reindex
+  re-embeds only the notes whose text actually changed and drops deleted ones, so routine
+  updates are cheap. (It compares file contents, not git history.)
 
 ## Setup
 
@@ -23,39 +37,33 @@ uv sync
 cp .env.example .env            # then put your key in it
 ```
 
-`.env` (gitignored) is loaded automatically by the CLI and the test suite:
+`.env` (gitignored) is loaded automatically by the CLI and tests:
 
 ```
 VOYAGE_API_KEY=...              # required
 # VAULT_PATH=/home/cotidie/repositories/cotidie/knowledge-base  # optional; else the default
 ```
 
-Environment variables, if exported, still work and take precedence.
+Exported environment variables still work and take precedence.
 
 ## Usage
 
-### 1. Build the index (once, and after editing notes)
+**Index the vault** (once, then again whenever notes change):
 
 ```bash
-uv run vault-search --reindex
-# → Indexed 1234 chunks from /home/cotidie/repositories/cotidie/knowledge-base
+uv run vault-search --reindex     # incremental: re-embeds only changed notes
+uv run vault-search --rebuild     # force a full rebuild from scratch
 ```
 
-`--reindex` walks every `*.md` in the vault (skipping templates, `.obsidian/`,
-`.git/`), chunks each note by heading structure, embeds the chunks with Voyage,
-and writes them to LanceDB. It is a full rebuild — there is no auto-sync in
-iteration 1, so re-run it whenever notes change.
-
-### 2. Search
+**Search:**
 
 ```bash
-uv run vault-search "GARCH structural breaks"
-uv run vault-search --k 5 "변동성 레짐 전환"        # Korean / mixed queries work
-uv run vault-search --reindex "regime shift"      # rebuild, then query in one go
+uv run vault-search "GARCH structural breaks"     # hybrid (default)
+uv run vault-search --k 5 "변동성 레짐 전환"          # Korean / mixed queries work
+uv run vault-search --mode fts "KOSDAQ150"        # keyword-only; runs offline, no API key
 ```
 
-Each result is the matching note path, its breadcrumb (`folder > title >
-heading`), and a snippet:
+Each result shows the note path, its breadcrumb (`folder > title > heading`), and a snippet:
 
 ```
 98-Resources/notes/volatility.md  [98-Resources/notes > volatility > GARCH 구조적 변화]
@@ -66,13 +74,16 @@ heading`), and a snippet:
 
 | Flag | Default | Meaning |
 |------|---------|---------|
-| `QUERY` | — | The search text (positional). Omit only with `--reindex`. |
-| `--reindex` | off | Rebuild the index from the vault before any query. |
-| `--vault PATH` | `$VAULT_PATH` or the configured default | Vault to index/search. |
-| `--k N` | `8` | Number of results to return. |
+| `QUERY` | — | Search text (positional). Omit only when reindexing. |
+| `--mode` | `hybrid` | `vector` (meaning) \| `fts` (keywords, offline) \| `hybrid` (both). |
+| `--k N` | `8` | Number of results. |
+| `--reindex` | off | Incrementally update the index, then query if a QUERY is given. |
+| `--rebuild` | off | Force a full rebuild. |
+| `--status` | off | Show which notes drifted from the index (read-only, no embedding). |
+| `--vault PATH` | `$VAULT_PATH` or default | Vault to index/search. |
 
-The index lives at `~/.cache/obsidian-librarian/` (outside the vault, never
-committed). Delete that directory to force a clean rebuild.
+The index lives at `~/.cache/obsidian-librarian/`, outside the vault and never
+committed. Delete that directory for a clean slate.
 
 ## Development
 
@@ -80,9 +91,8 @@ committed). Delete that directory to force a clean rebuild.
 uv run pytest
 ```
 
-Embedding/end-to-end tests skip without `VOYAGE_API_KEY`; chunker, index, and
+Embedding / end-to-end tests skip without `VOYAGE_API_KEY`; chunker, index, and
 vault-walk tests always run.
 
-> **Note:** if your shell sources ROS (a leaked `PYTHONPATH`), prefix commands
-> with `env -u PYTHONPATH` so the project venv is not polluted, e.g.
-> `env -u PYTHONPATH uv run pytest`.
+> **Note:** if your shell sources ROS (a leaked `PYTHONPATH`), prefix commands with
+> `env -u PYTHONPATH` so the project venv stays clean, e.g. `env -u PYTHONPATH uv run pytest`.

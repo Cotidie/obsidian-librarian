@@ -12,3 +12,6 @@ def test_defaults_present():
     # agent-instruction / meta files are ingest noise, not knowledge — excluded
     assert "CLAUDE.md" in c.ignore_globs
     assert "AGENTS.md" in c.ignore_globs
+    # hybrid-search knobs (iteration 2)
+    assert c.search_mode == "hybrid"
+    assert c.fts_column == "text"

@@ -8,3 +8,5 @@ voyage embedding model choice
 LanceDB vector store rationale
 describe-to-text image handling
 incremental git sync index
+KOSDAQ150
+CET1 disclosure

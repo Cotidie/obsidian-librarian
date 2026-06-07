@@ -21,7 +21,8 @@ htmlcov/
 # Secrets
 .env
 
-# Editor / OS
+# Editor / OS / tooling
 .DS_Store
 .idea/
 .vscode/
+.serena/
