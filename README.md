@@ -20,9 +20,17 @@ Requires Python 3.13 and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 uv sync
-export VOYAGE_API_KEY=...        # required
-export VAULT_PATH=/home/cotidie/repositories/cotidie/knowledge-base  # or rely on the default
+cp .env.example .env            # then put your key in it
 ```
+
+`.env` (gitignored) is loaded automatically by the CLI and the test suite:
+
+```
+VOYAGE_API_KEY=...              # required
+# VAULT_PATH=/home/cotidie/repositories/cotidie/knowledge-base  # optional; else the default
+```
+
+Environment variables, if exported, still work and take precedence.
 
 ## Usage
 

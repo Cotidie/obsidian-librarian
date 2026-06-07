@@ -1,4 +1,5 @@
 import click
+from dotenv import load_dotenv
 
 from .chunker import chunk_note
 from .config import Config
@@ -26,6 +27,7 @@ def _reindex(cfg) -> int:
 @click.option("--vault", default=None, help="Vault path override.")
 @click.option("--k", default=8, help="Number of results.")
 def main(query, reindex, vault, k):
+    load_dotenv()  # VOYAGE_API_KEY / VAULT_PATH from a .env in the project root
     cfg = Config()
     if vault:
         cfg.vault_path = vault
