@@ -57,3 +57,35 @@ def test_hybrid_returns_both_signals(tmp_path):
     hits = idx.search(query_vector=[1.0, 0, 0, 0], query_text="KOSDAQ150", k=2, mode="hybrid")
     paths = {h["note_path"] for h in hits}
     assert {"a.md", "b.md"} <= paths
+
+
+def test_indexed_note_hashes(tmp_path):
+    cfg = _cfg(tmp_path)
+    idx = VectorIndex(cfg)
+    chunks, vecs = _rows()
+    idx.build(chunks, vecs, note_hashes={"a.md": "h1", "b.md": "h2"})
+    assert idx.has_table() is True
+    assert idx.indexed_note_hashes() == {"a.md": "h1", "b.md": "h2"}
+
+
+def test_incremental_replace(tmp_path):
+    cfg = _cfg(tmp_path)
+    idx = VectorIndex(cfg)
+    chunks, vecs = _rows()
+    idx.build(chunks, vecs, note_hashes={"a.md": "h1", "b.md": "h2"})
+
+    # replace a.md with new content + new hash; b.md untouched
+    idx.delete_notes(["a.md"])
+    new_a = [Chunk("a.md", "a > X", 0, "alpha rewritten KOSDAQ150")]
+    idx.add_chunks(new_a, [[0, 0, 1.0, 0]], {"a.md": "h1b"})
+    idx.rebuild_fts()
+
+    assert idx.indexed_note_hashes() == {"a.md": "h1b", "b.md": "h2"}
+    assert idx.count() == 2
+    hits = idx.search(query_text="KOSDAQ150", k=3, mode="fts")
+    assert hits[0]["note_path"] == "a.md"
+
+
+def test_has_table_false_when_missing(tmp_path):
+    cfg = _cfg(tmp_path)
+    assert VectorIndex(cfg).has_table() is False

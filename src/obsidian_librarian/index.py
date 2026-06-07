@@ -31,6 +31,25 @@ class VectorIndex:
     def _table(self):
         return self.db.open_table(self.cfg.table_name)
 
+    def has_table(self) -> bool:
+        # table_names() returns a plain list; list_tables() returns a wrapper object.
+        return self.cfg.table_name in self.db.table_names()
+
+    def indexed_note_hashes(self) -> dict:
+        # one note_hash per note_path (all chunks of a note share it)
+        rows = self._table().search().select(["note_path", "note_hash"]).limit(0).to_list()
+        return {r["note_path"]: r["note_hash"] for r in rows}
+
+    def delete_notes(self, paths) -> None:
+        paths = list(paths)
+        if not paths:
+            return
+        quoted = ",".join("'" + p.replace("'", "''") + "'" for p in paths)
+        self._table().delete(f"note_path IN ({quoted})")
+
+    def add_chunks(self, chunks, vectors, note_hashes) -> None:
+        self._table().add(list(self._rows(chunks, vectors, note_hashes)))
+
     def count(self) -> int:
         return self._table().count_rows()
 
