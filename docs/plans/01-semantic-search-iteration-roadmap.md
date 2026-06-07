@@ -39,7 +39,7 @@ How to use this roadmap: detail each iteration in its own numbered plan note
 | 1 | Dense search CLI | `vault-search "q"` → ranked notes | engine |
 | 1.5 | Ingest hygiene | results stop surfacing meta/agent files | ingest |
 | 2 | Hybrid retrieval | acronym/rare-token queries work | engine |
-| 3 | Auto sync-on-query *(optional)* | no manual `--reindex`; git oracle only at scale | engine |
+| 3 | Auto sync-on-query *(optional)* | no manual `--reindex` (hash-scan, no git) | engine |
 | 4 | `obsidian-librarian` MCP | Claude Code can query the vault | wrapper |
 | 5 | Synthesis rule | Librarian dedupes-before-filing | workflow |
 | 6 | Image describe-to-text | images become searchable | enrichment |
@@ -96,10 +96,10 @@ Iteration 2 shipped: BM25 + dense hybrid (`--mode vector|fts|hybrid`, RRF merge)
   **→ the iter-2 "merge-strategy" risk did not materialize.**
 - **Incremental reindex already delivers the freshness/cost goal** that iteration 3 was created
   for: no-op `--reindex` = 0 embeds, full vault ~2–3s, `--status` reports drift — all via the
-  content-hash scan, no git. **→ Iteration 3 re-scoped again:** its only remaining value is
+  content-hash scan, no git. **→ Iteration 3 re-scoped again, and the git change-oracle dropped
+  entirely (decided 2026-06-08):** the hash scan is enough, so iteration 3's only remaining value is
   making sync *automatic* (run the hash-scan implicitly before each query so the user never types
-  `--reindex`). That needs **no git**; git is now purely a scale optimization. Heading/goal below
-  updated accordingly.
+  `--reindex`). No git path will be built. Heading/goal below updated accordingly.
 - **The validation gap is now a recurring blocker (iter 1 *and* iter 2).** The real vault has no
   acronym/domain notes, so the headline rare-token win was proven only on a synthetic fixture and a
   throwaway test vault — never live. **→ Recommended near-term task: build an evaluation set** —
@@ -113,7 +113,7 @@ Iteration 2 shipped: BM25 + dense hybrid (`--mode vector|fts|hybrid`, RRF merge)
   sync — cheap now, revisit at scale), and CLI output needed real formatting work to be readable —
   reuse the structured hit shape (path / breadcrumb / snippet) for the MCP tool result.
 
-Net: ordering still holds. Iteration 3 reframed (auto-sync, hash-based; git optional). New standing
+Net: ordering still holds. Iteration 3 reframed (auto-sync, hash-based; git approach dropped). New standing
 recommendation: **stand up an evaluation set before leaning harder on relevance claims.**
 
 ---
@@ -151,24 +151,29 @@ recommendation: **stand up an evaluation set before leaning harder on relevance 
 - **Feedback to collect:** Is acronym recall solved? Does hybrid ever hurt good dense hits (merge weighting)? Reindex speed acceptable?
 - **Risks / open decisions:** merge strategy choice — default reversible, tune from feedback.
 
-## Iteration 3 — Auto sync-on-query (hash-based; git oracle optional)
+## Iteration 3 — Auto sync-on-query (hash-based)
 
-- **Re-scope (updated after iter 2 shipped):** iteration 2 already delivers *manual* incremental
-  reindex (`--reindex` re-embeds only changed notes via `note_hash`; `--status` shows drift). So
-  the remaining value here is **automatic** freshness — run the hash-scan *implicitly before every
-  query* so the user never types `--reindex`. That auto-sync needs **no git**: the content-hash
-  scan we already have suffices at current scale. **Git is now a pure optimization** — a
-  change-oracle that avoids re-hashing every file once the vault is large enough that per-query
-  hashing hurts. Defer git until then (full reindex is ~2–3s today). The git design below stands
-  for that eventual day. **Recommended to do the evaluation set (iter-2 feedback) before this.**
-- **Goal:** Make the index self-freshening without manual `--reindex` — cheap auto-sync now, O(changed files) via git later.
-- **User-facing value:** Just run `vault-search "q"` — it silently reconciles to current vault state first (handles auto-backup commits + uncommitted edits) and is fast even at 10K notes.
-- **Features introduced:** sync-on-invoke: `git diff --name-status <last_indexed_sha> HEAD` + `git status --porcelain` → A/M embed, D drop, R rename-path-only → hash-confirm candidates → persist new `HEAD` **last**; `last_indexed_sha` in a LanceDB meta row, validated via `git cat-file -e`; full rebuild on first run / drift; mtime+size git-less fallback.
-- **Deliverables:** `sync` module wired ahead of every search; meta table; `--reindex` demoted to force-rebuild.
-- **Testable conditions:** edit+commit one note → only it re-embeds; rerun no-change → 0 embeds; `git mv` → `note_path` updated, no re-embed; delete → dropped; auto-backup commit → 0 embeds; unset sha → full rebuild; kill mid-sync → next run redoes with no gap (proves "write last").
-- **User test flow:** make a few edits/commits, run search, confirm new content is findable without manual reindex.
-- **Feedback to collect:** Is launch latency acceptable after a burst of edits? Any staleness surprises?
-- **Risks / open decisions:** none affecting sequencing; last engine-only iteration.
+- **Scope (git approach discarded 2026-06-08):** the git change-oracle is **dropped** — the
+  content-hash scan from iteration 2 is enough. This iteration's only job is to run that scan
+  *automatically* before each query so the user never types `--reindex`. No git, no
+  `last_indexed_sha`, no commit inspection. It is **optional / low priority**: a full reindex is
+  ~2–3s at current scale, so manual `--reindex` already suffices day-to-day. **Do the evaluation
+  set (iter-2 feedback) before this.**
+- **Goal:** Make the index self-freshening without a manual `--reindex` step.
+- **User-facing value:** Just run `vault-search "q"` — it reconciles the index to the current vault
+  (re-embed changed, drop deleted) before searching.
+- **Features introduced:** wrap the existing `_sync` (hash diff of `iter_notes` vs stored
+  `note_hash`) to run before each query; a `--no-sync` escape hatch to skip it; `--reindex` /
+  `--rebuild` stay for explicit control. Only file bytes are hashed for unchanged notes — no
+  embedding cost unless content changed.
+- **Deliverables:** auto-sync wired ahead of search in the CLI; `--no-sync` flag.
+- **Testable conditions:** edit a note then query (no `--reindex`) → new content is found; no-change
+  query → 0 re-embeds; delete a note → it stops appearing; `--no-sync` skips reconciliation.
+- **User test flow:** edit a note, run a normal query, confirm the edit is reflected without reindexing.
+- **Feedback to collect:** Is per-query latency acceptable after a burst of edits? At what vault size
+  does hashing-every-file-per-query start to hurt?
+- **Risks / open decisions:** per-query hash-scan cost at very large vaults — measure before
+  optimizing; do **not** pre-build a git path (explicitly discarded).
 
 ## Iteration 4 — `obsidian-librarian` MCP server
 
@@ -196,7 +201,7 @@ recommendation: **stand up an evaluation set before leaning harder on relevance 
 
 - **Goal:** Make image attachments searchable without a multimodal index.
 - **User-facing value:** Searching a concept in an image (incl. Korean OCR text) surfaces the image via its companion note.
-- **Features introduced:** Librarian step at review time — write `image-name.md` companion (caption + OCR + tags, frontmatter `image_path:`), move binary to `98-Resources/images/`; indexing unchanged (companion `.md` rides the normal git/hash/sync flow). Add the step to `AGENTS.md`.
+- **Features introduced:** Librarian step at review time — write `image-name.md` companion (caption + OCR + tags, frontmatter `image_path:`), move binary to `98-Resources/images/`; indexing unchanged (companion `.md` rides the normal hash/sync flow). Add the step to `AGENTS.md`.
 - **Deliverables:** `AGENTS.md` image step; one worked example companion note.
 - **Testable conditions:** a query matching an image's caption/OCR returns the companion note pointing at the image.
 - **User test flow:** add an image to the inbox, run review, then search a phrase only present in the image.
