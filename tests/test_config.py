@@ -9,3 +9,6 @@ def test_defaults_present():
     assert c.vault_path.endswith("knowledge-base")
     assert "lancedb" in c.index_path
     assert "templates" in " ".join(c.ignore_globs)
+    # agent-instruction / meta files are ingest noise, not knowledge — excluded
+    assert "CLAUDE.md" in c.ignore_globs
+    assert "AGENTS.md" in c.ignore_globs

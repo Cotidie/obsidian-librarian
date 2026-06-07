@@ -15,4 +15,8 @@ class Config:
     chunk_min_tokens: int = 80       # below this, merge with siblings / keep whole note
     chunk_max_tokens: int = 500      # above this, descend a heading level or paragraph-split
     overlap_sentences: int = 1       # overlap when paragraph-splitting an oversized leaf
-    ignore_globs: tuple = ("98-Resources/templates/*", ".obsidian/*", ".git/*")
+    # templates + housekeeping dirs, and agent-instruction / meta files that are
+    # ingest noise rather than knowledge (CLAUDE.md is a symlink to AGENTS.md, so
+    # indexing both also duplicates every chunk).
+    ignore_globs: tuple = ("98-Resources/templates/*", ".obsidian/*", ".git/*",
+                           "CLAUDE.md", "AGENTS.md", "README.md")
