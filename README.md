@@ -11,7 +11,6 @@ they *mean*, not just the words they contain. Built to later back an
 
 - **Hybrid retrieval** — dense semantic vectors and BM25 keywords together, so both
   paraphrases and rare exact tokens (acronyms, tickers) land.
-- **Multilingual** — Korean, English, and mixed-language queries all work.
 - **Heading-aware chunking** — notes are split by structure and carry a
   `folder > title > heading` breadcrumb for precise, readable hits.
 - **Incremental indexing** — only changed notes are re-embedded, so keeping the index
