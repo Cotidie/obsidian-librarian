@@ -2,10 +2,11 @@ import voyageai
 
 from .chunker import estimate_tokens
 
-# Voyage caps each call by list length and total tokens. Keep batches under both:
-# 128 texts max, and a token budget that fits the free tier's 10K TPM ceiling.
-MAX_BATCH = 128
-TOKEN_BUDGET = 8000
+# Voyage caps each call by list length (1000) and total tokens per request
+# (120K for voyage-4-large). Batch under both, with headroom; the token budget is
+# the usual binding constraint. Sized for standard (paid) rate limits.
+MAX_BATCH = 1000
+TOKEN_BUDGET = 100000
 
 
 def _batches(texts):
@@ -24,9 +25,8 @@ def _batches(texts):
 class EmbeddingClient:
     def __init__(self, cfg):
         self.cfg = cfg
-        # max_retries lets the SDK back off on 429s instead of failing immediately;
-        # generous count so backoff can outlast a free-tier per-minute (TPM) window.
-        self.client = voyageai.Client(max_retries=8)  # reads VOYAGE_API_KEY from env
+        # max_retries lets the SDK back off on transient 429s instead of failing.
+        self.client = voyageai.Client(max_retries=3)  # reads VOYAGE_API_KEY from env
 
     def _embed(self, texts, input_type):
         out = []
