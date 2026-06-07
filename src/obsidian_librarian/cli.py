@@ -110,7 +110,18 @@ def main(query, reindex, rebuild, status, mode, vault, k):
     mode = mode or cfg.search_mode
     qv = EmbeddingClient(cfg).embed_query(query) if mode in ("vector", "hybrid") else None
     hits = VectorIndex(cfg).search(query_vector=qv, query_text=query, k=k, mode=mode)
-    for h in hits:
-        click.echo(f"{h['note_path']}  [{h['breadcrumb']}]")
-        snippet = h["text"].replace("\n", " ")[:160]
-        click.echo(f"    {snippet}")
+    _print_hits(query, mode, hits)
+
+
+def _print_hits(query, mode, hits) -> None:
+    if not hits:
+        click.echo(f'No results for "{query}" ({mode}).')
+        return
+    click.echo(click.style(f'"{query}"  ·  {mode}  ·  {len(hits)} results', dim=True))
+    width = len(str(len(hits)))
+    for i, h in enumerate(hits, 1):
+        snippet = " ".join(h["text"].split())[:200]
+        click.echo("─" * 60)
+        click.echo(f"{str(i).rjust(width)}. {click.style(h['note_path'], bold=True)}")
+        click.echo(f"{' ' * (width + 2)}{click.style(h['breadcrumb'], fg='cyan')}")
+        click.echo(f"{' ' * (width + 2)}{snippet}")
