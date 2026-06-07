@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# uv / venv (uv.lock is committed for reproducible deps)
+.venv/
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local index / cache (built outside the vault)
+*.lance/
+.cache/
+
+# Secrets
+.env
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
