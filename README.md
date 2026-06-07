@@ -63,11 +63,15 @@ uv run vault-search --k 5 "변동성 레짐 전환"          # Korean / mixed qu
 uv run vault-search --mode fts "KOSDAQ150"        # keyword-only; runs offline, no API key
 ```
 
-Each result shows the note path, its breadcrumb (`folder > title > heading`), and a snippet:
+Each result is numbered and shows the note path, its breadcrumb
+(`folder > title > heading`), and a snippet:
 
 ```
-98-Resources/notes/volatility.md  [98-Resources/notes > volatility > GARCH 구조적 변화]
-    변동성 레짐 전환에 대한 메모. structural break 탐지.
+"GARCH" · hybrid · 2 results
+────────────────────────────────────────────────────────────
+1. 98-Resources/notes/volatility.md
+   98-Resources/notes > volatility > GARCH 구조적 변화
+   변동성 레짐 전환에 대한 메모. structural break 탐지.
 ```
 
 ### Options
@@ -84,6 +88,11 @@ Each result shows the note path, its breadcrumb (`folder > title > heading`), an
 
 The index lives at `~/.cache/obsidian-librarian/`, outside the vault and never
 committed. Delete that directory for a clean slate.
+
+### Current limitations
+
+- **No automatic sync yet** — re-run `--reindex` after editing notes (it's incremental, so cheap).
+- **Results can cluster** — several top hits may be different chunks of the same note.
 
 ## Development
 

@@ -39,7 +39,7 @@ How to use this roadmap: detail each iteration in its own numbered plan note
 | 1 | Dense search CLI | `vault-search "q"` → ranked notes | engine |
 | 1.5 | Ingest hygiene | results stop surfacing meta/agent files | ingest |
 | 2 | Hybrid retrieval | acronym/rare-token queries work | engine |
-| 3 | Incremental sync | always-fresh, fast re-runs | engine |
+| 3 | Auto sync-on-query *(optional)* | no manual `--reindex`; git oracle only at scale | engine |
 | 4 | `obsidian-librarian` MCP | Claude Code can query the vault | wrapper |
 | 5 | Synthesis rule | Librarian dedupes-before-filing | workflow |
 | 6 | Image describe-to-text | images become searchable | enrichment |
@@ -85,6 +85,37 @@ and how it revises the rest of the roadmap:
 Net: ordering holds (CLI → hybrid → sync → MCP → synthesis → image → Docker), with **1.5
 prepended** and **iter 3 demoted to optional**.
 
+## Feedback from Iteration 2 (2026-06-08)
+
+Iteration 2 shipped: BM25 + dense hybrid (`--mode vector|fts|hybrid`, RRF merge), incremental
+`--reindex` (content-hash), `--rebuild`, and `--status`. What it taught us:
+
+- **Hybrid needed zero new data and zero tuning.** LanceDB ships native BM25 FTS and an
+  `RRFReranker`; the default RRF merge worked first try, with our own Voyage query vectors via
+  `.vector().text()` (no embedding-registry wiring). The `rrf_k` knob is exposed but untouched.
+  **→ the iter-2 "merge-strategy" risk did not materialize.**
+- **Incremental reindex already delivers the freshness/cost goal** that iteration 3 was created
+  for: no-op `--reindex` = 0 embeds, full vault ~2–3s, `--status` reports drift — all via the
+  content-hash scan, no git. **→ Iteration 3 re-scoped again:** its only remaining value is
+  making sync *automatic* (run the hash-scan implicitly before each query so the user never types
+  `--reindex`). That needs **no git**; git is now purely a scale optimization. Heading/goal below
+  updated accordingly.
+- **The validation gap is now a recurring blocker (iter 1 *and* iter 2).** The real vault has no
+  acronym/domain notes, so the headline rare-token win was proven only on a synthetic fixture and a
+  throwaway test vault — never live. **→ Recommended near-term task: build an evaluation set** —
+  seed a handful of representative notes (acronyms, domain terms, Korean) or a labelled
+  query→expected-note set — so every future iteration has a *real* acceptance gate instead of a
+  synthetic one. This is the single highest-leverage non-feature work right now.
+- **Top-k can be dominated by one note's chunks** (a "LanceDB" query returned three chunks from the
+  same plan note). **→ retrieval-quality follow-up:** optional note-level grouping / max-chunks-per-note
+  diversification. Not blocking; fold into a later quality pass.
+- **Operational notes for iter 4 (MCP):** FTS is not auto-updated on insert (we rebuild it after each
+  sync — cheap now, revisit at scale), and CLI output needed real formatting work to be readable —
+  reuse the structured hit shape (path / breadcrumb / snippet) for the MCP tool result.
+
+Net: ordering still holds. Iteration 3 reframed (auto-sync, hash-based; git optional). New standing
+recommendation: **stand up an evaluation set before leaning harder on relevance claims.**
+
 ---
 
 ## Iteration 1 — Dense semantic search CLI
@@ -108,8 +139,9 @@ prepended** and **iter 3 demoted to optional**.
 - **Open follow-ups:** treat zero-chunk notes explicitly (e.g. `README.md`); revisit the
   ignore list as the vault grows (other meta files, dotfolders).
 
-## Iteration 2 — Hybrid retrieval (add BM25)
+## Iteration 2 — Hybrid retrieval (add BM25) (DONE 2026-06-08)
 
+- **What shipped:** native LanceDB BM25 FTS + RRF hybrid (`--mode vector|fts|hybrid`, default hybrid; `fts` offline); incremental `--reindex` (content-hash, 0-embed no-ops), `--rebuild`, read-only `--status`; acronym fixture for deterministic rare-token proof; 19 tests. Validated on a synthetic fixture (no live acronym notes in the vault yet — see iter-2 feedback).
 - **Goal:** Fix rare-exact-token recall (CET1, KOSDAQ150) that dense-only blurs; avoid re-embedding unchanged notes.
 - **User-facing value:** Same CLI now nails acronym/ticker queries; re-runs skip unchanged notes so reindex is cheaper.
 - **Features introduced:** LanceDB BM25 full-text index + merge with dense results (default RRF or weighted — pick one, expose a knob); per-note content-hash dedupe so `--reindex` re-embeds only changed notes (full-scan hash compare, not git yet).
@@ -119,14 +151,17 @@ prepended** and **iter 3 demoted to optional**.
 - **Feedback to collect:** Is acronym recall solved? Does hybrid ever hurt good dense hits (merge weighting)? Reindex speed acceptable?
 - **Risks / open decisions:** merge strategy choice — default reversible, tune from feedback.
 
-## Iteration 3 — Incremental sync (git change-oracle) — RE-SCOPED: optional speed layer
+## Iteration 3 — Auto sync-on-query (hash-based; git oracle optional)
 
-- **Re-scope (from iter-1 feedback):** correctness-level incremental reindex is now
-  achievable via the iter-2 `note_hash` scan, so this iteration is **demoted to an optional
-  performance optimization**: git is only the fast *change-oracle* that avoids a full
-  hash-scan at large vault sizes. Defer until reindex latency actually hurts (it is ~2.7s
-  at current scale). Everything below stands as the eventual design when that day comes.
-- **Goal:** Make the index self-freshening and O(changed files) without manual `--reindex`.
+- **Re-scope (updated after iter 2 shipped):** iteration 2 already delivers *manual* incremental
+  reindex (`--reindex` re-embeds only changed notes via `note_hash`; `--status` shows drift). So
+  the remaining value here is **automatic** freshness — run the hash-scan *implicitly before every
+  query* so the user never types `--reindex`. That auto-sync needs **no git**: the content-hash
+  scan we already have suffices at current scale. **Git is now a pure optimization** — a
+  change-oracle that avoids re-hashing every file once the vault is large enough that per-query
+  hashing hurts. Defer git until then (full reindex is ~2–3s today). The git design below stands
+  for that eventual day. **Recommended to do the evaluation set (iter-2 feedback) before this.**
+- **Goal:** Make the index self-freshening without manual `--reindex` — cheap auto-sync now, O(changed files) via git later.
 - **User-facing value:** Just run `vault-search "q"` — it silently reconciles to current vault state first (handles auto-backup commits + uncommitted edits) and is fast even at 10K notes.
 - **Features introduced:** sync-on-invoke: `git diff --name-status <last_indexed_sha> HEAD` + `git status --porcelain` → A/M embed, D drop, R rename-path-only → hash-confirm candidates → persist new `HEAD` **last**; `last_indexed_sha` in a LanceDB meta row, validated via `git cat-file -e`; full rebuild on first run / drift; mtime+size git-less fallback.
 - **Deliverables:** `sync` module wired ahead of every search; meta table; `--reindex` demoted to force-rebuild.
