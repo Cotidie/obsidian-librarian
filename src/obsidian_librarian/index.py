@@ -32,8 +32,9 @@ class VectorIndex:
         return self.db.open_table(self.cfg.table_name)
 
     def has_table(self) -> bool:
-        # table_names() returns a plain list; list_tables() returns a wrapper object.
-        return self.cfg.table_name in self.db.table_names()
+        # list_tables() returns a ListTablesResponse wrapper; its .tables field is
+        # the plain name list (membership on the wrapper itself iterates fields).
+        return self.cfg.table_name in self.db.list_tables().tables
 
     def indexed_note_hashes(self) -> dict:
         # one note_hash per note_path (all chunks of a note share it)
