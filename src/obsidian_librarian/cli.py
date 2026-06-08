@@ -54,6 +54,29 @@ def _sync(cfg, embedder) -> dict:
             "deleted": len(deleted), "chunks": len(chunks)}
 
 
+def _auto_sync(cfg) -> dict | None:
+    """Reconcile the index to the vault before a query. Returns None if no index
+    exists yet, else {"reconciled": N}. Embeds only when notes were added/changed,
+    so a deletion-only reconcile stays offline. Degrades to stale results (stderr
+    warning) if embedding fails, e.g. an unavailable key."""
+    idx, has, new, changed, deleted = _classify(cfg)
+    if not has:
+        return None
+    reconciled = len(new) + len(changed) + len(deleted)
+    if reconciled == 0:
+        return {"reconciled": 0}
+    try:
+        idx.delete_notes(deleted + [n.note_path for n in changed])
+        chunks, hashes = _chunk_notes(new + changed, cfg)
+        if chunks:
+            idx.add_chunks(chunks, _embed_chunks(chunks, EmbeddingClient(cfg)), hashes)
+        idx.rebuild_fts()
+    except Exception as e:  # noqa: BLE001 — degrade, don't crash a query on a sync hiccup
+        click.echo(f"warning: auto-sync failed ({e}); results may be stale", err=True)
+        return {"reconciled": 0}
+    return {"reconciled": reconciled}
+
+
 def _status(cfg) -> None:
     _, has, new, changed, deleted = _classify(cfg)
     if not has:
@@ -75,11 +98,12 @@ def _status(cfg) -> None:
 @click.option("--reindex", is_flag=True, help="Incrementally sync the index (embed only changed notes).")
 @click.option("--rebuild", is_flag=True, help="Force a full rebuild of the index.")
 @click.option("--status", "status", is_flag=True, help="Show index drift vs the vault (read-only, no embedding).")
+@click.option("--no-sync", "no_sync", is_flag=True, help="Skip the auto-sync a query runs by default (faster, may be stale).")
 @click.option("--mode", type=click.Choice(["vector", "fts", "hybrid"]), default=None,
               help="Search mode. Default from config (hybrid). 'fts' is offline.")
 @click.option("--vault", default=None, help="Vault path override.")
 @click.option("--k", default=8, help="Number of results.")
-def main(query, reindex, rebuild, status, mode, vault, k):
+def main(query, reindex, rebuild, status, no_sync, mode, vault, k):
     load_dotenv()  # VOYAGE_API_KEY / VAULT_PATH from a .env in the project root
     cfg = Config()
     if vault:
@@ -106,6 +130,14 @@ def main(query, reindex, rebuild, status, mode, vault, k):
         if did_index:
             return
         raise click.UsageError("Provide a QUERY, or use --reindex / --rebuild / --status.")
+
+    if not (reindex or rebuild):  # --reindex/--rebuild already reconciled above
+        if not VectorIndex(cfg).has_table():
+            raise click.UsageError("No index yet. Run --reindex first.")
+        if not no_sync:
+            synced = _auto_sync(cfg)
+            if synced and synced["reconciled"]:
+                click.echo(f"(auto-synced {synced['reconciled']} change(s))", err=True)
 
     mode = mode or cfg.search_mode
     qv = EmbeddingClient(cfg).embed_query(query) if mode in ("vector", "hybrid") else None
