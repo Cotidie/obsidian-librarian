@@ -71,7 +71,7 @@ def test_fts_query_is_offline(tmp_path, monkeypatch):
     (vault / "acr.md").write_text("## Capital\n\ncapital ratio CET1 KOSDAQ150 disclosure")
     _fake_build(vault, tmp_path, monkeypatch)
     # fts must not construct the embedding client
-    monkeypatch.setattr("obsidian_librarian.cli.EmbeddingClient", _Boom)
+    monkeypatch.setattr("obsidian_librarian.service.EmbeddingClient", _Boom)
     r = CliRunner().invoke(main, ["--vault", str(vault), "--mode", "fts", "KOSDAQ150"])
     assert r.exit_code == 0, r.output
     assert "acr.md" in r.output
@@ -82,7 +82,7 @@ def test_query_without_index_errors(tmp_path, monkeypatch):
     vault.mkdir()
     (vault / "n.md").write_text("## A\n\nbody text")
     monkeypatch.setenv("VAULT_INDEX_PATH", str(tmp_path / "db"))  # never built
-    monkeypatch.setattr("obsidian_librarian.cli.EmbeddingClient", _Boom)
+    monkeypatch.setattr("obsidian_librarian.service.EmbeddingClient", _Boom)
     r = CliRunner().invoke(main, ["--vault", str(vault), "anything"])
     assert r.exit_code != 0
     assert "No index yet" in r.output
@@ -97,7 +97,7 @@ def test_auto_sync_drops_deleted_offline(tmp_path, monkeypatch):
 
     (vault / "gone.md").unlink()
     # deletion reconcile embeds nothing, so it must stay offline
-    monkeypatch.setattr("obsidian_librarian.cli.EmbeddingClient", _Boom)
+    monkeypatch.setattr("obsidian_librarian.service.EmbeddingClient", _Boom)
     r = CliRunner().invoke(main, ["--vault", str(vault), "--mode", "fts", "uniquetoken"])
     assert r.exit_code == 0, r.output
     assert "gone.md" not in r.output
@@ -111,7 +111,7 @@ def test_no_sync_skips_reconcile(tmp_path, monkeypatch):
 
     def boom_sync(cfg):
         raise RuntimeError("auto-sync must be skipped with --no-sync")
-    monkeypatch.setattr("obsidian_librarian.cli._auto_sync", boom_sync)
+    monkeypatch.setattr("obsidian_librarian.service.auto_sync", boom_sync)
 
     r = CliRunner().invoke(main, ["--vault", str(vault), "--no-sync", "--mode", "fts", "capital"])
     assert r.exit_code == 0, r.output

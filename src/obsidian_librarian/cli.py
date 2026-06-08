@@ -1,96 +1,8 @@
 import click
 from dotenv import load_dotenv
 
-from .chunker import chunk_note
+from . import service
 from .config import Config
-from .embed import EmbeddingClient
-from .index import VectorIndex
-from .vault import iter_notes
-
-
-def _chunk_notes(notes, cfg):
-    chunks, hashes = [], {}
-    for note in notes:
-        hashes[note.note_path] = note.note_hash
-        chunks.extend(chunk_note(note.note_path, note.text, cfg))
-    return chunks, hashes
-
-
-def _embed_chunks(chunks, embedder):
-    return embedder.embed_documents([f"{c.breadcrumb}\n\n{c.text}" for c in chunks])
-
-
-def _full_build(cfg, embedder) -> int:
-    notes = list(iter_notes(cfg))
-    chunks, hashes = _chunk_notes(notes, cfg)
-    vectors = _embed_chunks(chunks, embedder)
-    VectorIndex(cfg).build(chunks, vectors, hashes)
-    return len(chunks)
-
-
-def _classify(cfg):
-    """Diff the vault against the index by note_hash. Returns (idx, has_table, new, changed, deleted)."""
-    notes = list(iter_notes(cfg))
-    cur = {n.note_path: n.note_hash for n in notes}
-    idx = VectorIndex(cfg)
-    has = idx.has_table()
-    indexed = idx.indexed_note_hashes() if has else {}
-    new = [n for n in notes if n.note_path not in indexed]
-    changed = [n for n in notes if n.note_path in indexed and cur[n.note_path] != indexed[n.note_path]]
-    deleted = sorted(p for p in indexed if p not in cur)
-    return idx, has, new, changed, deleted
-
-
-def _sync(cfg, embedder) -> dict:
-    idx, has, new, changed, deleted = _classify(cfg)
-    if not has:
-        return {"full": True, "chunks": _full_build(cfg, embedder)}
-    idx.delete_notes(deleted + [n.note_path for n in changed])
-    chunks, hashes = _chunk_notes(new + changed, cfg)
-    if chunks:
-        idx.add_chunks(chunks, _embed_chunks(chunks, embedder), hashes)
-    idx.rebuild_fts()  # always — also builds FTS on first sync over an iter-1 index
-    return {"full": False, "new": len(new), "changed": len(changed),
-            "deleted": len(deleted), "chunks": len(chunks)}
-
-
-def _auto_sync(cfg) -> dict | None:
-    """Reconcile the index to the vault before a query. Returns None if no index
-    exists yet, else {"reconciled": N}. Embeds only when notes were added/changed,
-    so a deletion-only reconcile stays offline. Degrades to stale results (stderr
-    warning) if embedding fails, e.g. an unavailable key."""
-    idx, has, new, changed, deleted = _classify(cfg)
-    if not has:
-        return None
-    reconciled = len(new) + len(changed) + len(deleted)
-    if reconciled == 0:
-        return {"reconciled": 0}
-    try:
-        idx.delete_notes(deleted + [n.note_path for n in changed])
-        chunks, hashes = _chunk_notes(new + changed, cfg)
-        if chunks:
-            idx.add_chunks(chunks, _embed_chunks(chunks, EmbeddingClient(cfg)), hashes)
-        idx.rebuild_fts()
-    except Exception as e:  # noqa: BLE001 — degrade, don't crash a query on a sync hiccup
-        click.echo(f"warning: auto-sync failed ({e}); results may be stale", err=True)
-        return {"reconciled": 0}
-    return {"reconciled": reconciled}
-
-
-def _status(cfg) -> None:
-    _, has, new, changed, deleted = _classify(cfg)
-    if not has:
-        raise click.UsageError("No index yet. Run --reindex first.")
-    if not (new or changed or deleted):
-        click.echo("IN SYNC")
-        return
-    click.echo("STALE — run --reindex")
-    for n in new:
-        click.echo(f"  added:   {n.note_path}")
-    for n in changed:
-        click.echo(f"  changed: {n.note_path}")
-    for p in deleted:
-        click.echo(f"  deleted: {p}")
 
 
 @click.command()
@@ -111,11 +23,11 @@ def main(query, reindex, rebuild, status, no_sync, mode, vault, k):
 
     did_index = False
     if rebuild:
-        n = _full_build(cfg, EmbeddingClient(cfg))
+        n = service.rebuild(cfg)
         click.echo(f"Rebuilt index: {n} chunks from {cfg.vault_path}")
         did_index = True
     elif reindex:
-        r = _sync(cfg, EmbeddingClient(cfg))
+        r = service.sync(cfg)
         if r["full"]:
             click.echo(f"Indexed {r['chunks']} chunks from {cfg.vault_path} (full build)")
         else:
@@ -132,17 +44,32 @@ def main(query, reindex, rebuild, status, no_sync, mode, vault, k):
         raise click.UsageError("Provide a QUERY, or use --reindex / --rebuild / --status.")
 
     if not (reindex or rebuild):  # --reindex/--rebuild already reconciled above
-        if not VectorIndex(cfg).has_table():
+        if not service.has_index(cfg):
             raise click.UsageError("No index yet. Run --reindex first.")
         if not no_sync:
-            synced = _auto_sync(cfg)
+            synced = service.auto_sync(cfg)
             if synced and synced["reconciled"]:
                 click.echo(f"(auto-synced {synced['reconciled']} change(s))", err=True)
 
     mode = mode or cfg.search_mode
-    qv = EmbeddingClient(cfg).embed_query(query) if mode in ("vector", "hybrid") else None
-    hits = VectorIndex(cfg).search(query_vector=qv, query_text=query, k=k, mode=mode)
+    hits = service.search(cfg, query, k, mode)
     _print_hits(query, mode, hits)
+
+
+def _status(cfg) -> None:
+    _, has, new, changed, deleted = service.classify(cfg)
+    if not has:
+        raise click.UsageError("No index yet. Run --reindex first.")
+    if not (new or changed or deleted):
+        click.echo("IN SYNC")
+        return
+    click.echo("STALE — run --reindex")
+    for n in new:
+        click.echo(f"  added:   {n.note_path}")
+    for n in changed:
+        click.echo(f"  changed: {n.note_path}")
+    for p in deleted:
+        click.echo(f"  deleted: {p}")
 
 
 def _print_hits(query, mode, hits) -> None:
