@@ -41,6 +41,27 @@ def search_vault(query: str, k: int = 8, mode: str = "hybrid") -> list[dict]:
              "snippet": " ".join(h["text"].split())[:400]} for h in hits]
 
 
+@mcp.tool()
+def reindex_vault(full: bool = False) -> dict:
+    """Reconcile the search index with the current vault on disk.
+
+    Call this after you create or edit notes and want a later search_vault to
+    see them — search_vault does not auto-refresh during a session. Returns a
+    summary of what changed.
+
+    Args:
+        full: False (default) embeds only new/changed notes (cheap). True forces
+            a full rebuild from scratch (use only if the index looks corrupt).
+    """
+    try:
+        with _stdout_to_stderr():  # sync runs noisy lancedb/voyageai library code
+            if full:
+                return {"full": True, "chunks": service.rebuild(cfg)}
+            return service.sync(cfg)
+    except Exception as e:  # noqa: BLE001 — report, don't kill the session
+        return {"error": str(e)}
+
+
 def _configure_stderr_logging() -> None:
     """Route our logging and noisy libraries to stderr (never stdout)."""
     logging.basicConfig(stream=sys.stderr, level=logging.WARNING)

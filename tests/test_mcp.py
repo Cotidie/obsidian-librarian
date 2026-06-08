@@ -66,6 +66,29 @@ def test_tool_does_not_sync(monkeypatch):
     assert out1 == out2 == [{"note_path": "a.md", "breadcrumb": "b > a", "snippet": "hello world"}]
 
 
+# ---- unit: reindex_vault wraps the engine, stays alive on failure -----------
+
+def test_reindex_incremental(monkeypatch):
+    sentinel = {"full": False, "new": 1, "changed": 0, "deleted": 0, "chunks": 3}
+    rebuilt = []
+    monkeypatch.setattr("obsidian_librarian.service.sync", lambda cfg: sentinel)
+    monkeypatch.setattr("obsidian_librarian.service.rebuild", lambda cfg: rebuilt.append(1))
+    assert mcp_server.reindex_vault() == sentinel
+    assert rebuilt == []  # incremental must not trigger a full rebuild
+
+
+def test_reindex_full(monkeypatch):
+    monkeypatch.setattr("obsidian_librarian.service.rebuild", lambda cfg: 42)
+    assert mcp_server.reindex_vault(full=True) == {"full": True, "chunks": 42}
+
+
+def test_reindex_error_does_not_raise(monkeypatch):
+    def boom(cfg):
+        raise RuntimeError("no VOYAGE_API_KEY")
+    monkeypatch.setattr("obsidian_librarian.service.sync", boom)
+    assert mcp_server.reindex_vault() == {"error": "no VOYAGE_API_KEY"}
+
+
 # ---- subprocess: protocol works, stdout stays pure --------------------------
 
 def test_server_lists_and_searches_offline(tmp_path):
@@ -81,7 +104,8 @@ def test_server_lists_and_searches_offline(tmp_path):
             async with ClientSession(r, w) as s:
                 await s.initialize()
                 tools = await s.list_tools()
-                assert any(t.name == "search_vault" for t in tools.tools)
+                names = {t.name for t in tools.tools}
+                assert {"search_vault", "reindex_vault"} <= names
                 res = await s.call_tool("search_vault", {"query": "KOSDAQ150", "mode": "fts"})
                 blob = "".join(getattr(c, "text", "") or "" for c in res.content)
                 assert "acr.md" in blob
@@ -114,6 +138,41 @@ def test_stdout_is_pure_jsonrpc(tmp_path):
     for ln in lines:  # every stdout line must be valid JSON-RPC, no library leakage
         json.loads(ln)
     assert "acr.md" in proc.stdout  # the tool call result came back on stdout
+
+
+def test_reindex_vault_stdout_is_pure_jsonrpc(tmp_path):
+    # Two notes, then delete one so the reindex is a deletion-only reconcile —
+    # no embedding, so the tool path runs fully offline (no VOYAGE_API_KEY).
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    (vault / "keep.md").write_text("## Keep\n\ncapital ratio CET1 disclosure")
+    gone = vault / "gone.md"
+    gone.write_text("## Gone\n\nKOSDAQ150 transient note")
+    db = tmp_path / "db"
+    _fake_build(vault, db)
+    gone.unlink()  # vault now drifts: one deletion to reconcile
+
+    msgs = "\n".join(json.dumps(m) for m in [
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize",
+         "params": {"protocolVersion": "2025-06-18", "capabilities": {},
+                    "clientInfo": {"name": "t", "version": "0"}}},
+        {"jsonrpc": "2.0", "method": "notifications/initialized"},
+        {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+         "params": {"name": "reindex_vault", "arguments": {}}},
+    ]) + "\n"
+
+    proc = subprocess.run(
+        [sys.executable, "-m", "obsidian_librarian.mcp_server"],
+        input=msgs, capture_output=True, text=True, timeout=60,
+        env=_server_env(vault, db, OBSIDIAN_LIBRARIAN_NO_SYNC="1"),  # isolate the tool's own sync
+        cwd=str(ROOT))
+
+    lines = [ln for ln in proc.stdout.splitlines() if ln.strip()]
+    assert lines, f"no stdout; stderr:\n{proc.stderr}"
+    for ln in lines:  # the mid-session reindex must not leak library output to stdout
+        json.loads(ln)
+    # the tool's reconcile summary rode back as the (non-error) result content
+    assert '"isError":false' in proc.stdout and "deleted" in proc.stdout
 
 
 @pytest.mark.skipif(not os.environ.get("VOYAGE_API_KEY"), reason="needs VOYAGE_API_KEY")

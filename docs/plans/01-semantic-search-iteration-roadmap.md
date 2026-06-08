@@ -3,7 +3,7 @@ type: plan
 status: draft
 created: 2026-06-08
 topic: Adaptive iteration roadmap for the semantic search + synthesis service
-sequencing: CLI-first; host-uv throughout; Docker last
+sequencing: CLI-first; host-uv throughout (Docker dropped — host-uv is sufficient)
 source_plan: "[[semantic-search-and-synthesis]]"
 related:
   - "[[semantic-search-and-synthesis]]"
@@ -27,7 +27,9 @@ technical decision is changed.
 
 **Confirmed sequencing:** CLI-first — validate retrieval in the easy-to-debug terminal
 before wrapping as MCP (matches the source plan's own "engine before wrapper" test
-order). Run host-side via `uv`/venv throughout; Docker only as a final hardening step.
+order). Run host-side via `uv`/venv throughout. **Docker dropped (2026-06-08):** host-`uv`
+has proven sufficient through iter 5 and the source plan always marked Docker optional, so
+the final packaging iteration is cancelled — see iteration 7.
 
 How to use this roadmap: detail each iteration in its own numbered plan note
 (`02-…`, `03-…`) only when it is reached, folding in feedback from the prior one.
@@ -42,11 +44,12 @@ How to use this roadmap: detail each iteration in its own numbered plan note
 | 3 | Auto sync-on-query *(DONE)* | no manual `--reindex` (hash-scan, no git) | engine |
 | 4 | `obsidian-librarian` MCP *(DONE)* | Claude Code can query the vault | wrapper |
 | 5 | Synthesis rule *(DONE)* | Librarian dedupes-before-filing | workflow |
-| 6 | Image describe-to-text | images become searchable | enrichment |
-| 7 | Docker + retire old MCP | reproducible install, one search system | hardening |
+| ~~6~~ | ~~Image describe-to-text~~ *(dropped)* | replaced by a read-time image rule | enrichment |
+| ~~7~~ | ~~Docker + retire old MCP~~ *(dropped)* | host-`uv` is sufficient | hardening |
 
-Iterations 1–3 are detailed below; 4–7 are intentionally light and will be re-planned
-from feedback.
+Iterations 1–5 shipped; 6 and 7 are **dropped** (see their sections). The semantic-search +
+synthesis build is effectively complete — remaining work is prompt-level refinement, not new
+iterations.
 
 ---
 
@@ -291,24 +294,33 @@ with corpus-strengthening running alongside rather than gating it.
 - **Feedback to collect:** Does the rule actually reduce duplication? Triggering at the right moments / too aggressively?
 - **Risks / open decisions:** prompt wording likely iterated from observed behavior.
 
-## Iteration 6 — Image describe-to-text
+## Iteration 6 — Image describe-to-text *(DROPPED 2026-06-08)*
 
-- **Goal:** Make image attachments searchable without a multimodal index.
-- **User-facing value:** Searching a concept in an image (incl. Korean OCR text) surfaces the image via its companion note.
-- **Features introduced:** Librarian step at review time — write `image-name.md` companion (caption + OCR + tags, frontmatter `image_path:`), move binary to `98-Resources/images/`; indexing unchanged (companion `.md` rides the normal hash/sync flow). Add the step to `AGENTS.md`.
-- **Deliverables:** `AGENTS.md` image step; one worked example companion note.
-- **Testable conditions:** a query matching an image's caption/OCR returns the companion note pointing at the image.
-- **User test flow:** add an image to the inbox, run review, then search a phrase only present in the image.
-- **Feedback to collect:** caption/OCR quality (esp. Korean); is concept-only search (not visual similarity) enough?
-- **Risks / open decisions:** reserve `voyage-multimodal-3` + second index only if visual similarity is later needed.
+**Dropped.** The original goal was making images *searchable* via companion `.md` notes
+(caption + OCR + tags) that the index picks up. The user reframed the actual need: not
+search over images, but having the **Librarian comprehend images embedded in a note when it
+reads that note**, and **carry those images into the notes it synthesizes**. That is a
+prompt-level behavior, not a search feature — no companion notes, no new index path.
 
-## Iteration 7 — Docker packaging + retire `obsidian-vault`
+**Replaced by a read-time image rule (2026-06-08):** `AGENTS.md` gained an "Images in notes"
+section — (1) *comprehend*: Read any embedded image (`![[...]]`/`![](...)`) before
+summarizing/synthesizing; (2) *carry*: when turning a memo into Review/Question/Knowledge
+notes, re-embed each relevant image at the contextually right spot and move the binary to
+`98-Resources/images/`. The `process-inbox` skill references it. Distinct from the
+`/codex-image` Knowledge step (which *generates new* illustrations).
 
-- **Goal:** Reproducible, dependency-isolated install; converge on one search system.
-- **User-facing value:** `docker run` MCP entry with no host Python deps; the old keyword MCP is gone.
-- **Features introduced:** slim Docker image (vault `:ro`, index on named volume, host UID/GID, `safe.directory`, secrets at runtime); switch MCP registration to `docker run`; **remove `obsidian-vault` from `~/.claude.json`** only after `search_vault`'s BM25 half is validated and `mcp-obsidian` isn't used for writes/tag-management.
-- **Deliverables:** `Dockerfile`; updated MCP registration; SETUP/README note.
-- **Testable conditions:** sub-second container start; `:ro` blocks writes; index volume persists across `--rm` (2nd run skips re-embed); index not root-owned; old MCP removed and nothing breaks.
-- **User test flow:** rebuild, register the docker command, run a session search; confirm old MCP gone.
-- **Feedback to collect:** container-start latency tolerable? any UID/volume friction worth keeping host-uv instead?
-- **Risks / open decisions:** Docker is explicitly optional in the source plan — may be skipped entirely if host-uv proves sufficient.
+Image *search* (companion notes + `voyage-multimodal-3` + a second index) is shelved; revisit
+only if concept-search over image content is later wanted.
+
+## Iteration 7 — Docker packaging *(DROPPED 2026-06-08)*
+
+**Dropped.** Docker was always optional in the source plan, and host-`uv` has run the CLI
+and MCP server cleanly through iteration 5 — no dependency-isolation or reproducibility pain
+has surfaced that would justify the container overhead (image build, UID/GID + volume
+friction, `safe.directory`). Current host-`uv` usage is sufficient. Revisit only if a real
+install/reproducibility problem appears.
+
+**Surviving cleanup — DONE (2026-06-08):** the old `obsidian-vault` keyword MCP is already
+retired. `claude mcp list` shows only `obsidian-librarian` (+ `serena`); `obsidian-vault` /
+`mcp-obsidian` is no longer registered in any config scope. No write/tag-management dependency
+remained — `search_vault` is read-only and Claude Code's native file tools cover vault writes.
