@@ -39,7 +39,7 @@ How to use this roadmap: detail each iteration in its own numbered plan note
 | 1 | Dense search CLI | `vault-search "q"` → ranked notes | engine |
 | 1.5 | Ingest hygiene | results stop surfacing meta/agent files | ingest |
 | 2 | Hybrid retrieval | acronym/rare-token queries work | engine |
-| 3 | Auto sync-on-query *(optional)* | no manual `--reindex` (hash-scan, no git) | engine |
+| 3 | Auto sync-on-query *(DONE)* | no manual `--reindex` (hash-scan, no git) | engine |
 | 4 | `obsidian-librarian` MCP | Claude Code can query the vault | wrapper |
 | 5 | Synthesis rule | Librarian dedupes-before-filing | workflow |
 | 6 | Image describe-to-text | images become searchable | enrichment |
@@ -116,6 +116,41 @@ Iteration 2 shipped: BM25 + dense hybrid (`--mode vector|fts|hybrid`, RRF merge)
 Net: ordering still holds. Iteration 3 reframed (auto-sync, hash-based; git approach dropped). New standing
 recommendation: **stand up an evaluation set before leaning harder on relevance claims.**
 
+## Feedback from Iteration 3 (2026-06-08)
+
+Iteration 3 shipped: auto sync-on-query (every plain query reconciles the index first), `--no-sync`,
+no-index guard, offline deletion reconcile, stderr-only sync notices. What it taught us:
+
+- **"Mostly wiring" held — discarding git was right.** The whole feature is one `_auto_sync` function
+  plus a flag (~90 lines) because iter-2's `_classify`/content-hash machinery already did the work.
+  **→ retroactively validates the 2026-06-08 decision to drop the git change-oracle** — we'd have
+  built a lot for nothing.
+- **The eval gate exists now but is toothless, and I skipped it during the iteration.** The eval set
+  PR #2 shipped was *not* run as the acceptance check — validation again leaned on synthetic probe
+  notes (`zubzubzub`). Running it after the fact: **Recall@k and MRR = 1.00 for vector, fts, *and*
+  hybrid** on the 13-chunk corpus. When all three modes score perfectly the gate can't discriminate —
+  the corpus is too small/easy. **→ the standing "build an eval set" recommendation is DONE, but
+  superseded by two corrections:** (a) make the eval *discriminating* (grow the corpus, add hard
+  negatives so modes separate); (b) **run `scripts/eval.py` as every iteration's acceptance gate**
+  instead of synthetic probes. Still the highest-leverage non-feature work.
+- **Biggest learning is for iter 4 (MCP): per-query sync is the wrong trigger.** The CLI now syncs on
+  *every* query; the source plan said sync-on-**launch**. In an MCP session Claude fires many
+  `search_vault` calls — per-call hash-scan + possible re-embed + FTS rebuild is wasteful and can
+  trigger surprise embedding costs mid-edit. **→ iter 4 must call `_auto_sync` once per server
+  startup (debounced), not wrap the per-query path.** The function is the reusable mechanism; the
+  trigger differs.
+- **Iter 3 did *not* solve stdout purity for iter 4.** Routing *our* echoes to stderr feels like
+  progress, but iter-1 feedback's actual warning was `lancedb`/`voyageai` *library* logging, which is
+  untouched. **→ keep that as an open iter-4 risk; don't let the stderr discipline create false
+  confidence.**
+- **Minor robustness:** `_auto_sync` deletes-then-embeds in one try-block, so a mid-sync embed failure
+  leaves the index partially reconciled and silently "stale." Fine for an interactive CLI; riskier in
+  MCP where a partial state is invisible to Claude. Fold into a later hardening pass.
+
+Net: ordering holds, but **strengthening the eval set is now higher-leverage than starting iter 4** —
+same reasoning as iter-2 feedback, reinforced by the saturated 1.00 scores. Iteration 4 amended below
+(sync-on-launch, not per-query; library-logging stdout risk still open).
+
 ---
 
 ## Iteration 1 — Dense semantic search CLI
@@ -183,14 +218,22 @@ recommendation: **stand up an evaluation set before leaning harder on relevance 
 
 ## Iteration 4 — `obsidian-librarian` MCP server
 
+> **Amended after iteration 3 (2026-06-08):** sync **on-launch, not per-query** (see below); the
+> `lancedb`/`voyageai` library-logging stdout risk is **still open** — iter 3 only routed our own
+> echoes to stderr. Recommend strengthening the eval set (iter-3 feedback) *before* starting this.
+
 - **Goal:** Expose the validated engine to Claude Code over stdio.
 - **User-facing value:** In a Claude Code session, the Librarian can call `search_vault(query, k)` against the live vault (sync-on-launch). Run host-side via `uv` (no Docker yet).
 - **Features introduced:** stdio MCP server `obsidian-librarian` wrapping sync + search; `search_vault` tool returning ranked chunks (`note_path`, breadcrumb, snippet); registration in `~/.claude.json`. **stdout purity** — all logs to stderr.
+- **Sync trigger (from iter-3 learning):** reuse `_auto_sync` as the mechanism, but call it **once at
+  server startup (debounced)** — *not* per `search_vault` call. Per-query sync × many tool calls a
+  session is wasteful (repeat hash-scan + FTS rebuild) and risks surprise re-embeds mid-edit. `--no-sync`
+  semantics map to "don't sync this session."
 - **Deliverables:** MCP server entrypoint; Claude Code registration; MCP Inspector run notes.
-- **Testable conditions:** Inspector lists `search_vault` and returns results; stdout contains only JSON-RPC (grep for non-JSON lines → none); identical query gives CLI-comparable results.
+- **Testable conditions:** Inspector lists `search_vault` and returns results; stdout contains only JSON-RPC (grep for non-JSON lines → none, **including `lancedb`/`voyageai` log lines**); identical query gives CLI-comparable results; sync runs once per session, not per call.
 - **User test flow:** register, open a session, ask Claude to `search_vault` a known topic, confirm sensible hits.
 - **Feedback to collect:** latency in-session; tool output shape useful for Claude; any protocol/stdout issues.
-- **Risks / open decisions:** keep `obsidian-vault` (old keyword MCP) installed in parallel until iter 7.
+- **Risks / open decisions:** keep `obsidian-vault` (old keyword MCP) installed in parallel until iter 7. **Library stdout logging** (`lancedb`/`voyageai`) must be silenced/redirected — unsolved by iter 3.
 
 ## Iteration 5 — Synthesis workflow rule
 
