@@ -48,7 +48,7 @@ Exported environment variables still work and take precedence.
 
 ## Usage
 
-**Index the vault** (once, then again whenever notes change):
+**Build the index** the first time (queries keep it fresh after that, see below):
 
 ```bash
 uv run vault-search --reindex     # incremental: re-embeds only changed notes
@@ -62,6 +62,13 @@ uv run vault-search "GARCH structural breaks"     # hybrid (default)
 uv run vault-search --k 5 "변동성 레짐 전환"          # Korean / mixed queries work
 uv run vault-search --mode fts "KOSDAQ150"        # keyword-only; runs offline, no API key
 ```
+
+Every query **auto-syncs first**: before searching, the index is reconciled to the
+current vault (re-embed changed/new notes, drop deleted ones) using the same cheap
+content-hash scan as `--reindex`, so you never have to remember to reindex after
+editing. Unchanged notes cost nothing (only their bytes are hashed), and a reconcile
+that only deletes notes needs no API key. Pass `--no-sync` to skip it for a faster
+(possibly stale) query. Sync notices print to stderr; stdout stays results-only.
 
 Each result is numbered and shows the note path, its breadcrumb
 (`folder > title > heading`), and a snippet:
@@ -84,6 +91,7 @@ Each result is numbered and shows the note path, its breadcrumb
 | `--reindex` | off | Incrementally update the index, then query if a QUERY is given. |
 | `--rebuild` | off | Force a full rebuild. |
 | `--status` | off | Show which notes drifted from the index (read-only, no embedding). |
+| `--no-sync` | off | Skip the auto-sync a query runs by default (faster, may be stale). |
 | `--vault PATH` | `$VAULT_PATH` or default | Vault to index/search. |
 
 The index lives at `~/.cache/obsidian-librarian/`, outside the vault and never
@@ -91,7 +99,8 @@ committed. Delete that directory for a clean slate.
 
 ### Current limitations
 
-- **No automatic sync yet** — re-run `--reindex` after editing notes (it's incremental, so cheap).
+- **Per-query sync cost grows with vault size** — auto-sync hashes every file on each
+  query. Cheap at the current scale; `--no-sync` skips it if it ever bites.
 - **Results can cluster** — several top hits may be different chunks of the same note.
 
 ## Development

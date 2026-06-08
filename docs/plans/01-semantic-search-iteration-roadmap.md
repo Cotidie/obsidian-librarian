@@ -151,8 +151,14 @@ recommendation: **stand up an evaluation set before leaning harder on relevance 
 - **Feedback to collect:** Is acronym recall solved? Does hybrid ever hurt good dense hits (merge weighting)? Reindex speed acceptable?
 - **Risks / open decisions:** merge strategy choice — default reversible, tune from feedback.
 
-## Iteration 3 — Auto sync-on-query (hash-based)
+## Iteration 3 — Auto sync-on-query (hash-based) (DONE 2026-06-08)
 
+- **What shipped:** every plain `vault-search "q"` auto-reconciles the index to the vault
+  (re-embed new/changed, drop deleted) via the iter-2 content-hash scan before searching —
+  no manual `--reindex`, no git. `--no-sync` opts out; a no-index query errors with a
+  friendly "run --reindex"; deletion-only reconcile stays offline and embedding failures
+  degrade to stale results + a stderr warning (stdout stays results-only). `--reindex`/
+  `--rebuild` keep explicit control. 4 tests added (3 deterministic + 1 key-gated).
 - **Scope (git approach discarded 2026-06-08):** the git change-oracle is **dropped** — the
   content-hash scan from iteration 2 is enough. This iteration's only job is to run that scan
   *automatically* before each query so the user never types `--reindex`. No git, no
