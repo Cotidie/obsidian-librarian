@@ -77,6 +77,66 @@ def test_fts_query_is_offline(tmp_path, monkeypatch):
     assert "acr.md" in r.output
 
 
+def test_query_without_index_errors(tmp_path, monkeypatch):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    (vault / "n.md").write_text("## A\n\nbody text")
+    monkeypatch.setenv("VAULT_INDEX_PATH", str(tmp_path / "db"))  # never built
+    monkeypatch.setattr("obsidian_librarian.cli.EmbeddingClient", _Boom)
+    r = CliRunner().invoke(main, ["--vault", str(vault), "anything"])
+    assert r.exit_code != 0
+    assert "No index yet" in r.output
+
+
+def test_auto_sync_drops_deleted_offline(tmp_path, monkeypatch):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    (vault / "keep.md").write_text("## Keep\n\nalpha content stays here")
+    (vault / "gone.md").write_text("## Gone\n\nuniquetoken zeta about to vanish")
+    _fake_build(vault, tmp_path, monkeypatch)
+
+    (vault / "gone.md").unlink()
+    # deletion reconcile embeds nothing, so it must stay offline
+    monkeypatch.setattr("obsidian_librarian.cli.EmbeddingClient", _Boom)
+    r = CliRunner().invoke(main, ["--vault", str(vault), "--mode", "fts", "uniquetoken"])
+    assert r.exit_code == 0, r.output
+    assert "gone.md" not in r.output
+
+
+def test_no_sync_skips_reconcile(tmp_path, monkeypatch):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    (vault / "n.md").write_text("## A\n\ncapital ratio body text")
+    _fake_build(vault, tmp_path, monkeypatch)
+
+    def boom_sync(cfg):
+        raise RuntimeError("auto-sync must be skipped with --no-sync")
+    monkeypatch.setattr("obsidian_librarian.cli._auto_sync", boom_sync)
+
+    r = CliRunner().invoke(main, ["--vault", str(vault), "--no-sync", "--mode", "fts", "capital"])
+    assert r.exit_code == 0, r.output
+    # without --no-sync the same monkeypatch fires, proving auto-sync is wired
+    r2 = CliRunner().invoke(main, ["--vault", str(vault), "--mode", "fts", "capital"])
+    assert r2.exit_code != 0
+
+
+@pytest.mark.skipif(not os.environ.get("VOYAGE_API_KEY"), reason="needs VOYAGE_API_KEY")
+def test_auto_sync_reembeds_edit(tmp_path, monkeypatch):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    (vault / "n.md").write_text("## A\n\noriginal note about alpha")
+    monkeypatch.setenv("VAULT_INDEX_PATH", str(tmp_path / "db"))
+
+    r1 = CliRunner().invoke(main, ["--vault", str(vault), "--reindex"])
+    assert r1.exit_code == 0, r1.output
+
+    (vault / "n.md").write_text("## A\n\noriginal note about zxqphrase")
+    r2 = CliRunner().invoke(main, ["--vault", str(vault), "zxqphrase"])
+    assert r2.exit_code == 0, r2.output
+    assert "n.md" in r2.output
+    assert "auto-synced" in r2.stderr
+
+
 @pytest.mark.skipif(not os.environ.get("VOYAGE_API_KEY"), reason="needs VOYAGE_API_KEY")
 def test_reindex_incremental_zero_reembed(tmp_path, monkeypatch):
     vault = tmp_path / "vault"
