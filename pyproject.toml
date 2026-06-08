@@ -10,6 +10,7 @@ requires-python = ">=3.13"
 dependencies = [
     "click>=8.4.1",
     "lancedb>=0.33.0",
+    "mcp>=1.27.2",
     "numpy>=2.4.6",
     "pyarrow>=24.0.0",
     "python-dotenv>=1.2.2",
@@ -19,6 +20,7 @@ dependencies = [
 
 [project.scripts]
 vault-search = "obsidian_librarian.cli:main"
+obsidian-librarian = "obsidian_librarian.mcp_server:run"
 
 [build-system]
 requires = ["uv_build>=0.11.14,<0.12.0"]
