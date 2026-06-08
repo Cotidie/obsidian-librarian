@@ -41,7 +41,7 @@ How to use this roadmap: detail each iteration in its own numbered plan note
 | 2 | Hybrid retrieval | acronym/rare-token queries work | engine |
 | 3 | Auto sync-on-query *(DONE)* | no manual `--reindex` (hash-scan, no git) | engine |
 | 4 | `obsidian-librarian` MCP *(DONE)* | Claude Code can query the vault | wrapper |
-| 5 | Synthesis rule | Librarian dedupes-before-filing | workflow |
+| 5 | Synthesis rule *(DONE)* | Librarian dedupes-before-filing | workflow |
 | 6 | Image describe-to-text | images become searchable | enrichment |
 | 7 | Docker + retire old MCP | reproducible install, one search system | hardening |
 
@@ -151,6 +151,32 @@ Net: ordering holds, but **strengthening the eval set is now higher-leverage tha
 same reasoning as iter-2 feedback, reinforced by the saturated 1.00 scores. Iteration 4 amended below
 (sync-on-launch, not per-query; library-logging stdout risk still open).
 
+## Feedback from Iteration 4 (2026-06-08)
+
+Iteration 4 shipped: stdio MCP server `obsidian-librarian` (`search_vault` tool), sync-on-launch,
+stdout purity, shared `service.py` engine. First **live in-session** use — a planning session opened
+with `search_vault "the importance of the starting point of a research"` against the real vault. What
+that taught us:
+
+- **Tool-output shape is sufficient.** The `note_path` + `breadcrumb` + `snippet` triple per hit was
+  enough to judge relevance and honestly report "no matching note" — no scores or full chunk text
+  needed yet. **→ validates the iter-2 decision** to reuse the structured hit shape for the MCP result;
+  don't add fields until a real need appears.
+- **The thin-corpus gap is now visible at the point of use, not just in eval.** The query returned
+  mostly the tool's *own* plan docs (`semantic-search-and-synthesis`, this roadmap) plus one tangential
+  Korean memo; no domain note existed to retrieve. **→ this directly threatens iter 5** —
+  retrieval-driven dedup can only merge into notes that exist and are findable. Reconfirms the standing
+  iter-1/2/3 recommendation to grow the corpus / eval set; now tracked as a **parallel non-feature
+  task**, not an iter-5 blocker (iter 5 seeds its own test fixture instead — see below).
+- **stdout purity / protocol held** in real use — no malformed responses or stray non-JSON lines
+  observed this session.
+- **Not yet stressed:** first-search latency after a batch of edits, sync-on-launch staleness in long
+  sessions, and `claude mcp add` registration friction (the open questions in test guide
+  `docs/testing/05-iteration-4-mcp-server.md`). Carry them forward; none blocks iter 5.
+
+Net: iter-4 mechanics validated in live use; ordering holds. **Proceeding to iter 5 (synthesis rule)**,
+with corpus-strengthening running alongside rather than gating it.
+
 ---
 
 ## Iteration 1 — Dense semantic search CLI
@@ -246,8 +272,16 @@ same reasoning as iter-2 feedback, reinforced by the saturated 1.00 scores. Iter
 - **Feedback to collect:** latency in-session; tool output shape useful for Claude; any protocol/stdout issues.
 - **Risks / open decisions:** keep `obsidian-vault` (old keyword MCP) installed in parallel until iter 7. **Library stdout logging** (`lancedb`/`voyageai`) must be silenced/redirected — unsolved by iter 3.
 
-## Iteration 5 — Synthesis workflow rule
+## Iteration 5 — Synthesis workflow rule (DONE 2026-06-08)
 
+- **What shipped:** the `AGENTS.md` "Synthesis rule (update before create)" step 1 now calls
+  `search_vault` (obsidian-librarian MCP) on a memo's key concepts before creating any
+  Question/Knowledge note — **replacing** the manual `02-Questions`/`03-Knowledge` folder
+  scan (kept only as a one-line fallback if the tool is unavailable). Steps 2–5 unchanged; the
+  Inbox-processing steps inherit it. Edit rides the `CLAUDE.md`→`AGENTS.md` symlink. No repo
+  code changed. Plan: [`06-iteration-5-synthesis-rule.md`](06-iteration-5-synthesis-rule.md);
+  test guide: [`../testing/06-iteration-5-synthesis-rule.md`](../testing/06-iteration-5-synthesis-rule.md).
+  Live dedup quality still gated by the thin corpus (iter-4 feedback) — tracked separately.
 - **Goal:** Realize the project's headline goal — retrieval-driven dedup.
 - **User-facing value:** When the Librarian files/synthesizes an Inbox memo, it first `search_vault`s the memo's key concepts and updates/links existing notes instead of duplicating.
 - **Features introduced:** extend the Synthesis rule in `AGENTS.md` (→ `CLAUDE.md` symlink) with the `search_vault`-before-create trigger.
