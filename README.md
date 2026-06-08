@@ -1,9 +1,9 @@
 # obsidian-librarian
 
-Meaning-based search over an Obsidian vault, from the terminal. Ask in natural
-language (or by keyword) and get back the most relevant notes — ranked by what
-they *mean*, not just the words they contain. Built to later back an
-`obsidian-librarian` MCP server for Claude Code.
+Meaning-based search over an Obsidian vault. Ask in natural language (or by keyword)
+and get back the most relevant notes — ranked by what they *mean*, not just the words
+they contain. Use it from the terminal (`vault-search`) or let Claude Code query your
+vault in-session through the bundled MCP server.
 
 > Design notes and the iteration roadmap live in [`docs/plans/`](docs/plans/).
 
@@ -111,11 +111,24 @@ The same engine is exposed to Claude Code as a stdio MCP server so the Librarian
 search your vault mid-session. It serves one tool, **`search_vault(query, k, mode)`**,
 returning ranked chunks (`note_path`, breadcrumb, snippet).
 
-Register it (user scope):
+Register it at **user scope** (`-s user` → available in all your projects), passing the
+key and vault path as env vars:
 
 ```bash
-claude mcp add obsidian-librarian -- \
-  uv run --directory /home/cotidie/repositories/cotidie/obsidian-librarian obsidian-librarian
+claude mcp add obsidian-librarian -s user \
+  -e VOYAGE_API_KEY=voy-... \
+  -e VAULT_PATH=/home/cotidie/repositories/cotidie/knowledge-base \
+  -- uv run --directory /home/cotidie/repositories/cotidie/obsidian-librarian obsidian-librarian
+```
+
+Or install the entry point on your PATH first, for a shorter command (no `--directory`):
+
+```bash
+uv tool install --editable /home/cotidie/repositories/cotidie/obsidian-librarian
+claude mcp add obsidian-librarian -s user \
+  -e VOYAGE_API_KEY=voy-... \
+  -e VAULT_PATH=/home/cotidie/repositories/cotidie/knowledge-base \
+  -- obsidian-librarian
 ```
 
 Then, in a session, ask Claude to search a topic — it calls `search_vault` against the
@@ -124,7 +137,10 @@ live vault.
 - **Sync on launch.** The index is reconciled **once when the server starts** (not per
   query), so the first search after a burst of edits may take a moment; the rest are fast.
   Set `OBSIDIAN_LIBRARIAN_NO_SYNC=1` to skip the launch sync (fast/offline start).
-- **`VOYAGE_API_KEY`** is read from the project `.env` (same as the CLI).
+- **Configuration via env** (precedence: `-e` flag > project `.env` > built-in default).
+  Honored vars: `VOYAGE_API_KEY` (required for embedding), `VAULT_PATH`, `VAULT_INDEX_PATH`.
+  Passing them with `-e` means the server needs neither a `.env` nor a specific working
+  directory.
 - **stdout is the JSON-RPC channel** — all logs (ours and `lancedb`/`voyageai`) go to
   stderr. Inspect with the MCP Inspector:
   `npx @modelcontextprotocol/inspector uv run --directory <repo> obsidian-librarian`.
