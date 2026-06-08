@@ -15,6 +15,8 @@ they *mean*, not just the words they contain. Built to later back an
   `folder > title > heading` breadcrumb for precise, readable hits.
 - **Incremental indexing** — only changed notes are re-embedded, so keeping the index
   fresh is cheap.
+- **MCP server** — the same engine runs as a stdio MCP server so Claude Code can
+  `search_vault` your notes in-session (sync-on-launch).
 
 ## How it works
 
@@ -102,6 +104,30 @@ committed. Delete that directory for a clean slate.
 - **Per-query sync cost grows with vault size** — auto-sync hashes every file on each
   query. Cheap at the current scale; `--no-sync` skips it if it ever bites.
 - **Results can cluster** — several top hits may be different chunks of the same note.
+
+## MCP server (Claude Code)
+
+The same engine is exposed to Claude Code as a stdio MCP server so the Librarian can
+search your vault mid-session. It serves one tool, **`search_vault(query, k, mode)`**,
+returning ranked chunks (`note_path`, breadcrumb, snippet).
+
+Register it (user scope):
+
+```bash
+claude mcp add obsidian-librarian -- \
+  uv run --directory /home/cotidie/repositories/cotidie/obsidian-librarian obsidian-librarian
+```
+
+Then, in a session, ask Claude to search a topic — it calls `search_vault` against the
+live vault.
+
+- **Sync on launch.** The index is reconciled **once when the server starts** (not per
+  query), so the first search after a burst of edits may take a moment; the rest are fast.
+  Set `OBSIDIAN_LIBRARIAN_NO_SYNC=1` to skip the launch sync (fast/offline start).
+- **`VOYAGE_API_KEY`** is read from the project `.env` (same as the CLI).
+- **stdout is the JSON-RPC channel** — all logs (ours and `lancedb`/`voyageai`) go to
+  stderr. Inspect with the MCP Inspector:
+  `npx @modelcontextprotocol/inspector uv run --directory <repo> obsidian-librarian`.
 
 ## Development
 

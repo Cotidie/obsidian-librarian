@@ -40,7 +40,7 @@ How to use this roadmap: detail each iteration in its own numbered plan note
 | 1.5 | Ingest hygiene | results stop surfacing meta/agent files | ingest |
 | 2 | Hybrid retrieval | acronym/rare-token queries work | engine |
 | 3 | Auto sync-on-query *(DONE)* | no manual `--reindex` (hash-scan, no git) | engine |
-| 4 | `obsidian-librarian` MCP | Claude Code can query the vault | wrapper |
+| 4 | `obsidian-librarian` MCP *(DONE)* | Claude Code can query the vault | wrapper |
 | 5 | Synthesis rule | Librarian dedupes-before-filing | workflow |
 | 6 | Image describe-to-text | images become searchable | enrichment |
 | 7 | Docker + retire old MCP | reproducible install, one search system | hardening |
@@ -216,7 +216,18 @@ same reasoning as iter-2 feedback, reinforced by the saturated 1.00 scores. Iter
 - **Risks / open decisions:** per-query hash-scan cost at very large vaults — measure before
   optimizing; do **not** pre-build a git path (explicitly discarded).
 
-## Iteration 4 — `obsidian-librarian` MCP server
+## Iteration 4 — `obsidian-librarian` MCP server (DONE 2026-06-08)
+
+- **What shipped:** stdio MCP server (`obsidian-librarian`, FastMCP) exposing one tool,
+  `search_vault(query, k, mode)`, returning ranked chunks (`note_path`, breadcrumb, snippet).
+  The engine was first extracted into `service.py` so the CLI and server share one code path.
+  **Sync-on-launch, not per-query** (the iter-3 learning): `run()` reconciles once via
+  `service.sync_on_launch` before serving; the tool only searches. **stdout purity** solved at
+  both layers — logging routed to stderr *and* an fd-level stdout→stderr redirect around the
+  launch sync (the noisy `lancedb`/`voyageai` phase); verified live against the vault (every
+  stdout line valid JSON-RPC; sync notices + server INFO on stderr). `OBSIDIAN_LIBRARIAN_NO_SYNC=1`
+  skips launch sync. 37 tests (incl. subprocess stdout-purity + key-gated hybrid e2e).
+- **Deferred to iter 7:** retiring the old `obsidian-vault` MCP (kept in parallel); Docker.
 
 > **Amended after iteration 3 (2026-06-08):** sync **on-launch, not per-query** (see below); the
 > `lancedb`/`voyageai` library-logging stdout risk is **still open** — iter 3 only routed our own
