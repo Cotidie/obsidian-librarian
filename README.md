@@ -59,10 +59,11 @@ Once registered, Claude can call two tools on your vault.
 Searches the vault by meaning and keyword. Returns up to `k` ranked chunks, each
 with the note path, a `folder > title > heading` breadcrumb, and the chunk text.
 
-- `query`: natural-language question or keywords (English, Korean, or mixed).
-- `k`: number of results to return. Default `8`.
-- `mode`: `"hybrid"` (default), `"vector"` (meaning only), or `"fts"` (keywords,
-  offline).
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `query` | required | Natural-language question or keywords (English, Korean, or mixed). |
+| `k` | `8` | Number of results to return. |
+| `mode` | `"hybrid"` | `"hybrid"`, `"vector"` (meaning only), or `"fts"` (keywords, offline). |
 
 ```text
 search_vault("volatility regime change", k=5, mode="vector")
@@ -74,8 +75,9 @@ Reconciles the search index with the vault on disk. Call after creating or
 editing notes; `search_vault` does not auto-refresh during a session. Returns a
 summary of what changed.
 
-- `full`: `False` (default) embeds only new or changed notes (cheap). `True`
-  forces a full rebuild from scratch (use only if the index looks corrupt).
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `full` | `False` | `False` embeds only new or changed notes (cheap). `True` forces a full rebuild from scratch (use only if the index looks corrupt). |
 
 ```text
 reindex_vault()           # cheap incremental sync
