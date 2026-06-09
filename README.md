@@ -6,7 +6,11 @@
 
 Semantic search for your Obsidian vault, straight from Claude.
 
-Obsidian Librarian turns your vault into a true second brain: ask a question in
+Obsidian Librarian is an MCP server that gives Claude semantic search over your
+Obsidian notes. It indexes your vault's Markdown files and exposes search and
+reindex tools, so Claude can find the right notes mid-conversation.
+
+It turns your vault into a true second brain: ask a question in
 plain language and get back the notes that actually answer it, ranked by what
 they mean rather than the exact words you typed. A search for "volatility regime
 change" will surface a note about "GARCH structural breaks" even if your wording
@@ -19,12 +23,9 @@ getting richer the more you use it.
 
 ## Features
 
-- **Meaning Based Search:** Ask in plain language, get notes ranked by what they
-  mean, not exact words you typed.
-- **Indexing .md Notes:** Scans vault's Markdown notes, builds searchable index
-  of their content.
-- **Auto Reindexing:** Reindex re-reads only notes that changed, keeping index
-  fresh cheaply.
+- **Meaning Based Search:** Ask in plain language, get notes ranked by what they mean.
+- **Indexing .md Notes:** Scans vault's Markdown notes, builds searchable index of their content.
+- **Auto Reindexing:** Reindex re-reads only notes that changed, keeping index fresh cheaply.
 
 ## Prerequisites
 
