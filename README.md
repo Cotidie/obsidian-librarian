@@ -84,14 +84,3 @@ reindex_vault(full=True)  # full rebuild
 
 The index lives at `~/.cache/obsidian-librarian/`, outside your vault. Delete
 that folder for a clean slate.
-
-## Development
-
-```bash
-uv run pytest
-```
-
-Embedding tests skip without `VOYAGE_API_KEY`; the rest always run.
-
-> If your shell sources ROS (a leaked `PYTHONPATH`), prefix commands with
-> `env -u PYTHONPATH`, e.g. `env -u PYTHONPATH uv run pytest`.
