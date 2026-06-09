@@ -1,8 +1,8 @@
+# Obsidian Librarian
+
 <p align="center">
   <img src="docs/cover.png" alt="Obsidian Librarian" width="100%">
 </p>
-
-# Obsidian Librarian
 
 Semantic search for your Obsidian vault, straight from Claude.
 
@@ -22,6 +22,7 @@ you already know, fills the gaps, and links new notes back in, so the vault keep
 getting richer the more you use it.
 
 ## Features
+![architecture](docs/architecture.png)  
 
 - **Meaning Based Search:** Ask in plain language, get notes ranked by what they mean.
 - **Indexing .md Notes:** Scans vault's Markdown notes, builds searchable index of their content.
