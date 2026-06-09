@@ -19,20 +19,19 @@ getting richer the more you use it.
 
 ## Features
 
-- **Meaning Based Search:** Ask in plain language and get notes ranked by what
-  they mean, not the exact words you typed.
-- **Indexing .md Notes:** Scans your vault's Markdown notes and builds a
-  searchable index of their content.
-- **Auto Reindexing:** A reindex re-reads only the notes that changed, keeping
-  the index fresh cheaply.
+- **Meaning Based Search:** Ask in plain language, get notes ranked by what they
+  mean, not exact words you typed.
+- **Indexing .md Notes:** Scans vault's Markdown notes, builds searchable index
+  of their content.
+- **Auto Reindexing:** Reindex re-reads only notes that changed, keeping index
+  fresh cheaply.
 
 ## Prerequisites
 
-- **[Claude Code](https://claude.com/claude-code)** — runs the MCP server.
-- **An Obsidian vault** — the Markdown notes you want to search.
-- **[uv](https://docs.astral.sh/uv/) and Python 3.13** — run the project.
-- **A [Voyage API key](https://www.voyageai.com/)** — powers meaning-based
-  search.
+- **[Claude Code](https://claude.com/claude-code)**: runs the MCP server.
+- **Obsidian vault**: Markdown notes you want to search.
+- **[uv](https://docs.astral.sh/uv/) and Python 3.13**: run the project.
+- **[Voyage API key](https://www.voyageai.com/)**: powers meaning-based search.
 
 ## Setup
 
