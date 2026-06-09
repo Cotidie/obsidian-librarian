@@ -36,17 +36,8 @@ getting richer the more you use it.
 
 ## Setup
 
-First install dependencies from the lockfile:
-
-```bash
-uv sync --directory /path/to/obsidian-librarian
-```
-
-`uv run` auto-syncs anyway, but doing it now surfaces any errors up front and
-avoids a slow first MCP launch.
-
-Then register Obsidian Librarian with Claude as a user-scope MCP server
-(available in every session):
+Register Obsidian Librarian with Claude as a user-scope MCP server (available in
+every session):
 
 ```bash
 claude mcp add obsidian-librarian --scope user \
