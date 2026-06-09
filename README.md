@@ -25,8 +25,8 @@ getting richer the more you use it.
 ![architecture](docs/architecture.png)  
 
 - **Meaning Based Search:** Ask in plain language, get notes ranked by what they mean.
-- **Indexing .md Notes:** Scans vault's Markdown notes, builds searchable index of their content.
-- **Auto Reindexing:** Reindex re-reads only notes that changed, keeping index fresh cheaply.
+- **Indexing .md Notes:** Builds searchable index of vault notes.
+- **Auto Reindexing:** Reindex notes that changed.
 
 ## Prerequisites
 
