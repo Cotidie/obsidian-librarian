@@ -49,54 +49,40 @@ That's it. Now just ask Claude in plain language:
 
 > Search my vault for notes on volatility regime change
 
-## From the terminal
+## MCP tools
 
-The same search also runs as a standalone command.
+Once registered, Claude can call two tools on your vault.
 
-Build the index once, then refresh it whenever your notes change:
+### `search_vault(query, k=8, mode="hybrid")`
 
-```bash
-uv run vault-search --reindex     # update: re-reads only changed notes
-uv run vault-search --rebuild     # start over from scratch
+Searches the vault by meaning and keyword. Returns up to `k` ranked chunks, each
+with the note path, a `folder > title > heading` breadcrumb, and the chunk text.
+
+- `query`: natural-language question or keywords (English, Korean, or mixed).
+- `k`: number of results to return. Default `8`.
+- `mode`: `"hybrid"` (default), `"vector"` (meaning only), or `"fts"` (keywords,
+  offline).
+
+```text
+search_vault("volatility regime change", k=5, mode="vector")
 ```
 
-Search:
+### `reindex_vault(full=False)`
 
-```bash
-uv run vault-search "GARCH structural breaks"     # search by meaning (default)
-uv run vault-search --k 5 "변동성 레짐 전환"          # Korean and mixed queries work
-uv run vault-search --mode fts "KOSDAQ150"        # keyword-only, runs offline
+Reconciles the search index with the vault on disk. Call after creating or
+editing notes; `search_vault` does not auto-refresh during a session. Returns a
+summary of what changed.
+
+- `full`: `False` (default) embeds only new or changed notes (cheap). `True`
+  forces a full rebuild from scratch (use only if the index looks corrupt).
+
+```text
+reindex_vault()           # cheap incremental sync
+reindex_vault(full=True)  # full rebuild
 ```
-
-Results look like this:
-
-```
-"GARCH" · hybrid · 2 results
-────────────────────────────────────────────────────────────
-1. 98-Resources/notes/volatility.md
-   98-Resources/notes > volatility > GARCH 구조적 변화
-   변동성 레짐 전환에 대한 메모. structural break 탐지.
-```
-
-### Options
-
-| Flag | Default | Meaning |
-|------|---------|---------|
-| `QUERY` | — | Search text. Omit only when refreshing the index. |
-| `--mode` | `hybrid` | `vector` (meaning) \| `fts` (keywords, offline) \| `hybrid` (both). |
-| `--k N` | `8` | Number of results. |
-| `--reindex` | off | Refresh the index, then search if a query is given. |
-| `--rebuild` | off | Rebuild the index from scratch. |
-| `--status` | off | Show which notes have drifted from the index. |
-| `--vault PATH` | default | Which vault to use. |
 
 The index lives at `~/.cache/obsidian-librarian/`, outside your vault. Delete
 that folder for a clean slate.
-
-### Good to know
-
-- **No auto-sync yet.** Run `--reindex` after editing notes (it's cheap).
-- **Results can cluster.** Several top hits may come from the same note.
 
 ## Development
 
