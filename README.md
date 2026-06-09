@@ -17,24 +17,22 @@ vault and write to it, your notes stop being a static archive: Claude finds what
 you already know, fills the gaps, and links new notes back in, so the vault keeps
 getting richer the more you use it.
 
-## What it does
+## Features
 
-- **Finds notes by meaning.** Describe what you're looking for and it finds the
-  closest matches, even when the wording differs.
-- **Still catches exact terms.** Acronyms, tickers, and rare keywords (like
-  `KOSDAQ150`) are matched precisely, so nothing slips through.
-- **Works across languages.** Korean, English, and mixed queries all work.
-- **Points you to the right spot.** Each result shows the note, the section it
-  came from, and a short snippet, so you know why it matched.
-- **Stays fresh cheaply.** After you edit notes, an update re-reads only what
-  changed instead of redoing everything.
+- **Meaning Based Search:** Ask in plain language and get notes ranked by what
+  they mean, not the exact words you typed.
+- **Indexing .md Notes:** Scans your vault's Markdown notes and builds a
+  searchable index of their content.
+- **Auto Reindexing:** A reindex re-reads only the notes that changed, keeping
+  the index fresh cheaply.
 
 ## Prerequisites
 
-- **[Claude Code](https://claude.com/claude-code)** to run the MCP server.
-- **[uv](https://docs.astral.sh/uv/)** and Python 3.13 to run the project.
-- **A [Voyage API key](https://www.voyageai.com/)** for the embeddings that power
-  meaning-based search.
+- **[Claude Code](https://claude.com/claude-code)** — runs the MCP server.
+- **An Obsidian vault** — the Markdown notes you want to search.
+- **[uv](https://docs.astral.sh/uv/) and Python 3.13** — run the project.
+- **A [Voyage API key](https://www.voyageai.com/)** — powers meaning-based
+  search.
 
 ## Setup
 
